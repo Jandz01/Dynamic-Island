@@ -5,42 +5,43 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Dynamic Island"
-        Height="360" Width="840"
+        Height="480" Width="980"
         WindowStyle="None"
+        ResizeMode="NoResize"
         AllowsTransparency="True"
         Background="{x:Null}"
         Topmost="True"
         ShowInTaskbar="False"
         WindowStartupLocation="Manual"
-        Loaded="Window_Loaded">
+        Loaded="Window_Loaded"
+        PreviewKeyDown="Window_PreviewKeyDown"
+        PreviewMouseMove="Window_PreviewMouseMove"
+        PreviewMouseUp="Window_PreviewMouseUp">
 
     <Window.Resources>
-        <!-- Button Style for Chips and Actions -->
+        <!-- Standard Action Chip -->
         <Style x:Key="ActionChipStyle" TargetType="Button">
-            <Setter Property="Background" Value="#242832"/>
-            <Setter Property="Foreground" Value="#E2E8F0"/>
-            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Background" Value="#1A1F2C"/>
+            <Setter Property="Foreground" Value="#F1F5F9"/>
+            <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Padding" Value="10,5"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="BorderBrush" Value="#384152"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border x:Name="border" Background="{TemplateBinding Background}" 
                                 BorderBrush="{TemplateBinding BorderBrush}" 
                                 BorderThickness="{TemplateBinding BorderThickness}" 
-                                CornerRadius="14" Padding="{TemplateBinding Padding}">
+                                CornerRadius="12" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#333A48"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#60A5FA"/>
-                            </Trigger>
-                            <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#1E232D"/>
+                                <Setter TargetName="border" Property="Background" Value="#2D3748"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#38BDF8"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -48,16 +49,14 @@
             </Setter>
         </Style>
 
-        <!-- Accent Chip (AI Gradient style) -->
         <Style x:Key="AiChipStyle" TargetType="Button" BasedOn="{StaticResource ActionChipStyle}">
-            <Setter Property="Background" Value="#2D2145"/>
+            <Setter Property="Background" Value="#2B1A4A"/>
             <Setter Property="BorderBrush" Value="#8B5CF6"/>
             <Setter Property="Foreground" Value="#E9D5FF"/>
         </Style>
 
-        <!-- Danger Block Button Style -->
         <Style x:Key="DangerButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#EF4444"/>
+            <Setter Property="Background" Value="#E11D48"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="Bold"/>
@@ -70,28 +69,22 @@
                                 CornerRadius="14" Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#DC2626"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
-        <!-- Icon Button Style (Circular) -->
         <Style x:Key="CircleIconBtn" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#94A3B8"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Width" Value="28"/>
-            <Setter Property="Height" Value="28"/>
+            <Setter Property="Width" Value="26"/>
+            <Setter Property="Height" Value="26"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="14">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="13">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -105,16 +98,42 @@
             </Setter>
         </Style>
 
-        <!-- Orbital Bubble Style -->
-        <Style x:Key="OrbitalBubbleStyle" TargetType="Border">
-            <Setter Property="Width" Value="48"/>
-            <Setter Property="Height" Value="48"/>
-            <Setter Property="CornerRadius" Value="24"/>
+        <Style x:Key="MediaControlBtn" TargetType="Button">
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="Foreground" Value="#F8FAFC"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Width" Value="36"/>
+            <Setter Property="Height" Value="36"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="18">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#38BDF8"/>
+                                <Setter Property="Foreground" Value="#090B10"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Planet Capsule Style -->
+        <Style x:Key="OrbitalPlanetStyle" TargetType="Border">
+            <Setter Property="Height" Value="52"/>
+            <Setter Property="Width" Value="52"/>
+            <Setter Property="CornerRadius" Value="26"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
             <Setter Property="RenderTransform">
                 <Setter.Value>
-                    <ScaleTransform x:Name="BubbleScale" ScaleX="1" ScaleY="1"/>
+                    <ScaleTransform x:Name="ScaleT" ScaleX="1" ScaleY="1"/>
                 </Setter.Value>
             </Setter>
         </Style>
@@ -123,288 +142,643 @@
     <!-- Main Container -->
     <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
         
-        <!-- The Dynamic Island Card -->
-        <Border x:Name="IslandCard" 
-                Width="420" Height="42"
-                HorizontalAlignment="Center" VerticalAlignment="Top"
-                Margin="0,4,0,0"
-                CornerRadius="21"
-                Background="#10131A"
-                BorderThickness="1.2"
-                MouseLeftButtonDown="IslandCard_MouseLeftButtonDown"
-                MouseEnter="IslandCard_MouseEnter"
-                MouseLeave="IslandCard_MouseLeave">
+        <!-- FLUID CANVAS FOR WATER DROPLET & ORBITAL PHYSICS -->
+        <Canvas x:Name="FluidCanvas" Width="980" Height="480" IsHitTestVisible="False">
             
-            <!-- Glowing Outline Border (Multi-tone Neon Effect) -->
-            <Border.BorderBrush>
-                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                    <GradientStop Color="#60A5FA" Offset="0.0"/>
-                    <GradientStop Color="#A855F7" Offset="0.5"/>
-                    <GradientStop Color="#38BDF8" Offset="1.0"/>
-                </LinearGradientBrush>
-            </Border.BorderBrush>
+            <!-- REAL TEARDROP FALLING DROPLET (Point at top, bulbous at bottom) -->
+            <Path x:Name="FallingDroplet" 
+                  Data="M 16,0 C 16,0 32,22 32,36 C 32,46 25,54 16,54 C 7,54 0,46 0,36 C 0,22 16,0 16,0 Z" 
+                  Fill="#07090E" Stroke="#EA580C" StrokeThickness="2" 
+                  Canvas.Left="474" Canvas.Top="0" Opacity="0"
+                  RenderTransformOrigin="0.5,0.5">
+                <Path.RenderTransform>
+                    <ScaleTransform x:Name="FallingDropletScale" ScaleX="1" ScaleY="1"/>
+                </Path.RenderTransform>
+                <Path.Effect>
+                    <DropShadowEffect x:Name="FallingDropletGlow" Color="#EA580C" BlurRadius="26" ShadowDepth="0" Opacity="1.0"/>
+                </Path.Effect>
+            </Path>
 
-            <!-- Soft Outer Glow -->
-            <Border.Effect>
-                <DropShadowEffect x:Name="CardGlow" 
-                                  Color="#38BDF8" 
-                                  BlurRadius="22" 
-                                  ShadowDepth="0" 
-                                  Opacity="0.45"/>
-            </Border.Effect>
+            <!-- REAL TEARDROP REVERSE DROPLET (Flowing upwards: bulbous at top, tail at bottom) -->
+            <Path x:Name="ReverseDroplet" 
+                  Data="M 16,54 C 16,54 32,32 32,18 C 32,8 25,0 16,0 C 7,0 0,8 0,18 C 0,32 16,54 16,54 Z" 
+                  Fill="#07090E" Stroke="#38BDF8" StrokeThickness="2" 
+                  Canvas.Left="474" Canvas.Top="140" Opacity="0"
+                  RenderTransformOrigin="0.5,0.5">
+                <Path.RenderTransform>
+                    <ScaleTransform x:Name="ReverseDropletScale" ScaleX="1" ScaleY="1"/>
+                </Path.RenderTransform>
+                <Path.Effect>
+                    <DropShadowEffect x:Name="ReverseDropletGlow" Color="#38BDF8" BlurRadius="26" ShadowDepth="0" Opacity="1.0"/>
+                </Path.Effect>
+            </Path>
+        </Canvas>
 
-            <Grid ClipToBounds="True">
+        <!-- HIGH-FIDELITY ORBITAL PLANETS VIEW (Zero Bounding Box, Free Floating, Correct Position) -->
+        <Grid x:Name="ViewOrbital" Width="680" Height="300" HorizontalAlignment="Center" VerticalAlignment="Top" Visibility="Collapsed">
+            <Canvas x:Name="OrbitCanvas" Width="680" Height="300" HorizontalAlignment="Center" VerticalAlignment="Top">
                 
-                <!-- 1. COMPACT NOTCH BAR VIEW -->
-                <Grid x:Name="ViewCompact" Visibility="Visible" VerticalAlignment="Center" Margin="14,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+                <!-- Laser Beam from Black Hole to Hovered Planet -->
+                <Line x:Name="ConnectingLine" 
+                      X1="340" Y1="150" X2="340" Y2="150"
+                      Stroke="#F97316" StrokeThickness="1.6" StrokeDashArray="3 3"
+                      Opacity="0">
+                    <Line.Effect>
+                        <DropShadowEffect x:Name="LineGlow" Color="#F97316" BlurRadius="14" ShadowDepth="0" Opacity="0.95"/>
+                    </Line.Effect>
+                </Line>
 
-                    <!-- Time & Date -->
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="🕒" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="TxtClock" Text="12:00:00" Foreground="#F1F5F9" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <!-- Elliptical Orbital Track -->
+                <Ellipse Canvas.Left="130" Canvas.Top="40" Width="420" Height="220" 
+                         Stroke="#1E293B" StrokeDashArray="4 4" StrokeThickness="1.2" Opacity="0.5"/>
+
+                <!-- PURE BLACK HOLE (Fiery Amber Accretion Disk, Zero Text) -->
+                <Border x:Name="BlackHoleCore" Canvas.Left="295" Canvas.Top="105" Width="90" Height="90" CornerRadius="45" 
+                        Background="#020202" BorderThickness="2.5" Cursor="Hand" 
+                        ToolTip="Hố đen trung tâm - Nhấp để thu gọn về thanh đảo"
+                        PreviewMouseLeftButtonDown="CoreHub_Click"
+                        RenderTransformOrigin="0.5,0.5">
+                    <Border.RenderTransform>
+                        <ScaleTransform x:Name="BlackHoleScale" ScaleX="1" ScaleY="1"/>
+                    </Border.RenderTransform>
+                    <Border.BorderBrush>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#F97316" Offset="0"/>
+                            <GradientStop Color="#FBBF24" Offset="0.5"/>
+                            <GradientStop Color="#EA580C" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.BorderBrush>
+                    <Border.Effect>
+                        <DropShadowEffect Color="#EA580C" BlurRadius="38" ShadowDepth="0" Opacity="1.0"/>
+                    </Border.Effect>
+                    <Ellipse Width="76" Height="76" Stroke="#F59E0B" StrokeThickness="0.8" Opacity="0.3"/>
+                </Border>
+
+                <!-- Satellite 1: Music (Luminous Amber) -->
+                <Border x:Name="OrbMusic" Style="{StaticResource OrbitalPlanetStyle}" 
+                        Canvas.Left="314" Canvas.Top="124" Background="#3D1E05" BorderBrush="#FBBF24" BorderThickness="1.8"
+                        ToolTip="Music Player" MouseLeftButtonDown="OrbMusic_Click"
+                        MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
+                    <Border.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                            <TranslateTransform x:Name="TransMusic"/>
+                        </TransformGroup>
+                    </Border.RenderTransform>
+                    <Border.Effect><DropShadowEffect Color="#F59E0B" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="🎵" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblMusic" Text="Music" Foreground="#FEF3C7" FontSize="12.5" FontWeight="Bold" 
+                                   Margin="8,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                     </StackPanel>
+                </Border>
 
-                    <!-- Battery & Quick Indicators in Center -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Border Background="#1E293B" CornerRadius="10" Padding="8,3" Margin="4,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="⚡" FontSize="11" Foreground="#38BDF8" Margin="0,0,4,0"/>
-                                <TextBlock x:Name="TxtBattery" Text="95%" Foreground="#E2E8F0" FontSize="11.5" FontWeight="Medium"/>
-                            </StackPanel>
+                <!-- Satellite 2: Notification & Messages (Luminous Cyan/Blue) -->
+                <Border x:Name="OrbNotify" Style="{StaticResource OrbitalPlanetStyle}" 
+                        Canvas.Left="314" Canvas.Top="124" Background="#0C2540" BorderBrush="#38BDF8" BorderThickness="1.8"
+                        ToolTip="Thông báo &amp; Tin nhắn (Zalo, Messenger, Telegram)" MouseLeftButtonDown="OrbNotify_Click"
+                        MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
+                    <Border.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                            <TranslateTransform x:Name="TransNotify"/>
+                        </TransformGroup>
+                    </Border.RenderTransform>
+                    <Border.Effect><DropShadowEffect Color="#38BDF8" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="💬" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblNotify" Text="Tin nhắn" Foreground="#E0F2FE" FontSize="12.5" FontWeight="Bold" 
+                                   Margin="8,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Satellite 3: Privacy Shield (Luminous Rose/Red) -->
+                <Border x:Name="OrbPrivacy" Style="{StaticResource OrbitalPlanetStyle}" 
+                        Canvas.Left="314" Canvas.Top="124" Background="#4C0A1C" BorderBrush="#FB7185" BorderThickness="1.8"
+                        ToolTip="Privacy Shield" MouseLeftButtonDown="OrbPrivacy_Click"
+                        MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
+                    <Border.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                            <TranslateTransform x:Name="TransPrivacy"/>
+                        </TransformGroup>
+                    </Border.RenderTransform>
+                    <Border.Effect><DropShadowEffect Color="#F43F5E" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="🔒" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblPrivacy" Text="Privacy" Foreground="#FFF1F2" FontSize="12.5" FontWeight="Bold" 
+                                   Margin="8,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Satellite 4: Dropzone (Luminous Emerald) -->
+                <Border x:Name="OrbDrop" Style="{StaticResource OrbitalPlanetStyle}" 
+                        Canvas.Left="314" Canvas.Top="124" Background="#063E2D" BorderBrush="#34D399" BorderThickness="1.8"
+                        ToolTip="Dropzone Files" MouseLeftButtonDown="OrbDrop_Click"
+                        MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
+                    <Border.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                            <TranslateTransform x:Name="TransDrop"/>
+                        </TransformGroup>
+                    </Border.RenderTransform>
+                    <Border.Effect><DropShadowEffect Color="#10B981" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="📁" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblDrop" Text="Dropzone" Foreground="#ECFDF5" FontSize="12.5" FontWeight="Bold" 
+                                   Margin="8,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Satellite 5: System Health (Luminous Cyan) -->
+                <Border x:Name="OrbSys" Style="{StaticResource OrbitalPlanetStyle}" 
+                        Canvas.Left="314" Canvas.Top="124" Background="#08304D" BorderBrush="#38BDF8" BorderThickness="1.8"
+                        ToolTip="System Health" MouseLeftButtonDown="OrbSys_Click"
+                        MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
+                    <Border.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                            <TranslateTransform x:Name="TransSys"/>
+                        </TransformGroup>
+                    </Border.RenderTransform>
+                    <Border.Effect><DropShadowEffect Color="#0EA5E9" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="💊" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblSys" Text="Sysmon" Foreground="#F0F9FF" FontSize="12.5" FontWeight="Bold" 
+                                   Margin="8,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Satellite 6: Pomodoro Focus (Luminous Gold) -->
+                <Border x:Name="OrbPomodoro" Style="{StaticResource OrbitalPlanetStyle}" 
+                        Canvas.Left="314" Canvas.Top="124" Background="#423403" BorderBrush="#FACC15" BorderThickness="1.8"
+                        ToolTip="Pomodoro Timer" MouseLeftButtonDown="OrbPomodoro_Click"
+                        MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
+                    <Border.RenderTransform>
+                        <TransformGroup>
+                            <ScaleTransform ScaleX="1" ScaleY="1"/>
+                            <TranslateTransform x:Name="TransPomodoro"/>
+                        </TransformGroup>
+                    </Border.RenderTransform>
+                    <Border.Effect><DropShadowEffect Color="#EAB308" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="⏱️" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblPomodoro" Text="Pomodoro" Foreground="#FEFCE8" FontSize="12.5" FontWeight="Bold" 
+                                   Margin="8,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                    </StackPanel>
+                </Border>
+
+            </Canvas>
+        </Grid>
+
+        <!-- DYNAMIC NOTCH WITH INWARD EAR BRACKETS (Seamless Top Bezel Anchor) -->
+        <Grid x:Name="NotchRoot" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,0,0,0"
+              Background="Transparent"
+              PreviewMouseLeftButtonDown="NotchRoot_PreviewMouseLeftButtonDown">
+            
+            <!-- Authentic Notch Outline with Flared Top Ears -->
+            <Path x:Name="NotchPath" 
+                  Fill="#0B0D14" 
+                  StrokeThickness="1.4">
+                <Path.Stroke>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#38BDF8" Offset="0.0"/>
+                        <GradientStop Color="#FFFFFF" Offset="0.5"/>
+                        <GradientStop Color="#C084FC" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </Path.Stroke>
+                <Path.Effect>
+                    <DropShadowEffect x:Name="CardGlow" Color="#38BDF8" BlurRadius="18" ShadowDepth="0" Opacity="0.5"/>
+                </Path.Effect>
+            </Path>
+
+            <!-- Card Content Container -->
+            <Border x:Name="IslandCard" 
+                    Width="540" Height="38"
+                    HorizontalAlignment="Center" VerticalAlignment="Top"
+                    Background="Transparent"
+                    CornerRadius="0,0,20,20"
+                    ClipToBounds="True">
+                
+                <Grid>
+                    <!-- 0. MINI SIZE VIEW: Ultra-compact, only spinning vinyl disc, does not block browser tabs -->
+                    <Grid x:Name="ViewMini" Visibility="Collapsed" VerticalAlignment="Center" HorizontalAlignment="Center" Cursor="Hand"
+                          ToolTip="Đang thu nhỏ (Minisize) • Nhấp để mở rộng • Kéo dãn xuống để bung hành tinh">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Spinning Mini Vinyl Record -->
+                        <Border Grid.Column="0" Width="24" Height="24" CornerRadius="12" 
+                                Background="#0A0714" BorderBrush="#A855F7" BorderThickness="1.2"
+                                RenderTransformOrigin="0.5,0.5" VerticalAlignment="Center">
+                            <Border.RenderTransform>
+                                <RotateTransform x:Name="MiniVinylRotate" Angle="0"/>
+                            </Border.RenderTransform>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#A855F7" BlurRadius="8" ShadowDepth="0" Opacity="0.8"/>
+                            </Border.Effect>
+                            <Grid>
+                                <Ellipse Width="20" Height="20" Stroke="#2D2245" StrokeThickness="0.6"/>
+                                <Ellipse Width="16" Height="16" Stroke="#2D2245" StrokeThickness="0.6"/>
+                                <Ellipse Width="7" Height="7" Fill="#0A0714" Stroke="#C084FC" StrokeThickness="0.8"/>
+                                <TextBlock x:Name="TxtMiniVinylCenterIcon" Text="🎵" FontSize="9" Foreground="#F8FAFC" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
                         </Border>
 
-                        <Border Background="#1E293B" CornerRadius="10" Padding="8,3" Margin="4,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="📊" FontSize="11" Margin="0,0,4,0"/>
-                                <TextBlock x:Name="TxtRam" Text="RAM 48%" Foreground="#CBD5E1" FontSize="11.5"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
+                        <!-- Mini indicator hint -->
+                        <TextBlock Grid.Column="1" Text=" ▾" FontSize="10" Foreground="#A855F7" FontWeight="Bold" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                    </Grid>
 
-                    <!-- Navigation Action Icons -->
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <!-- AI Hub button -->
-                        <Button Style="{StaticResource CircleIconBtn}" ToolTip="AI Assistant Hub" Click="BtnSwitchAi_Click">
-                            <TextBlock Text="✨" FontSize="13"/>
-                        </Button>
-                        <!-- Orbital button -->
-                        <Button Style="{StaticResource CircleIconBtn}" ToolTip="Orbital Satellite View" Click="BtnSwitchOrbital_Click">
-                            <TextBlock Text="🪐" FontSize="13"/>
-                        </Button>
-                        <!-- Privacy button -->
-                        <Button Style="{StaticResource CircleIconBtn}" ToolTip="Privacy Radar Shield" Click="BtnSwitchPrivacy_Click">
-                            <TextBlock Text="🛡️" FontSize="13"/>
-                        </Button>
-                        <!-- Dropzone button -->
-                        <Button Style="{StaticResource CircleIconBtn}" ToolTip="Dropzone File Tray" Click="BtnSwitchDropzone_Click">
-                            <TextBlock Text="📁" FontSize="13"/>
-                        </Button>
-                    </StackPanel>
-                </Grid>
-
-                <!-- 2. AI COMMAND BOX VIEW -->
-                <Grid x:Name="ViewAi" Visibility="Collapsed" Margin="16,12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
-
-                    <Grid Grid.Row="0">
+                    <!-- 1. COMPACT NOTCH BAR VIEW: Minimalist, Authentic -->
+                    <Grid x:Name="ViewCompact" Visibility="Visible" VerticalAlignment="Center" Margin="18,0" Cursor="Hand"
+                          ToolTip="Kéo dãn xuống để bung Vệ tinh Hành tinh (Orbital Mode)">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Glowing AI Avatar -->
-                        <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18" Margin="0,0,12,0">
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                    <GradientStop Color="#8B5CF6" Offset="0"/>
-                                    <GradientStop Color="#EC4899" Offset="1"/>
-                                </LinearGradientBrush>
-                            </Border.Background>
-                            <TextBlock Text="✦" Foreground="White" FontSize="18" FontWeight="Bold" 
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
+                        <!-- Left: Real Time & Vietnamese Day/Date -->
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="🕒" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="TxtClock" Text="04:29:41 Thứ Ba, 15/09" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
 
-                        <!-- AI Input Box -->
-                        <Border Grid.Column="1" Background="#1A1E29" CornerRadius="16" BorderThickness="1" BorderBrush="#334155" Padding="12,6">
+                        <!-- Center: Hardware Metrics (Battery, RAM, ROM, Live Mini Vinyl Disc, Screen Record Dot) -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- Battery -->
+                            <Border Background="#141923" CornerRadius="9" Padding="7,2" Margin="3,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="TxtBatteryIcon" Text="⚡" FontSize="11" Foreground="#38BDF8" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="TxtBattery" Text="100%" Foreground="#E2E8F0" FontSize="11" FontWeight="Medium"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- RAM -->
+                            <Border Background="#141923" CornerRadius="9" Padding="7,2" Margin="3,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="💬" FontSize="11" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="TxtRam" Text="52%" Foreground="#CBD5E1" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- ROM (Disk C) -->
+                            <Border Background="#141923" CornerRadius="9" Padding="7,2" Margin="3,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="💾" FontSize="11" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="TxtRom" Text="45%" Foreground="#CBD5E1" FontSize="11"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Mini Spinning Vinyl Disc / Music Ticker -->
+                            <Border x:Name="PillMediaMini" Background="#1B152B" BorderBrush="#A855F7" BorderThickness="0.8" 
+                                    CornerRadius="9" Padding="6,2" Margin="3,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="TxtMediaWave" Text="🎵" FontSize="11" Foreground="#C084FC" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="TxtMediaTitleCompact" Text="Music" Foreground="#E9D5FF" FontSize="11" MaxWidth="80" TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Screen Recording Indicator (Pulsing Red Dot) -->
+                            <Grid Margin="5,0,0,0" VerticalAlignment="Center">
+                                <Ellipse x:Name="DotRecordPulse" Width="12" Height="12" Fill="#EF4444" Opacity="0.4">
+                                    <Ellipse.Effect>
+                                        <DropShadowEffect Color="#EF4444" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+                                    </Ellipse.Effect>
+                                </Ellipse>
+                                <Ellipse Width="7" Height="7" Fill="#EF4444" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- Right: Position Arrows, Center Reset, Minisize & Exit App -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Left Arrow Move -->
+                            <Button Style="{StaticResource CircleIconBtn}" Width="19" Height="19" ToolTip="Dịch sang Trái (hoặc phím mũi tên ←)" Click="BtnMoveLeft_Click" Margin="0,0,2,0">
+                                <TextBlock Text="◀" FontSize="8.5" Foreground="#94A3B8"/>
+                            </Button>
+                            <!-- Center Reset -->
+                            <Button Style="{StaticResource CircleIconBtn}" Width="19" Height="19" ToolTip="Về Chính Giữa (hoặc phím mũi tên ↓ / Home)" Click="BtnResetCenter_Click" Margin="0,0,2,0">
+                                <TextBlock Text="⦿" FontSize="9.5" Foreground="#38BDF8"/>
+                            </Button>
+                            <!-- Right Arrow Move -->
+                            <Button Style="{StaticResource CircleIconBtn}" Width="19" Height="19" ToolTip="Dịch sang Phải (hoặc phím mũi tên →)" Click="BtnMoveRight_Click" Margin="0,0,5,0">
+                                <TextBlock Text="▶" FontSize="8.5" Foreground="#94A3B8"/>
+                            </Button>
+                            
+                            <!-- Minisize -->
+                            <Button x:Name="BtnMiniSize" Style="{StaticResource CircleIconBtn}" Width="20" Height="20"
+                                    ToolTip="Thu nhỏ siêu gọn (tránh cấn tab trình duyệt)" Click="BtnMiniSize_Click" Margin="0,0,4,0">
+                                <TextBlock Text="➖" FontSize="10" Foreground="#94A3B8" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Button>
+                            
+                            <!-- Exit / Shutdown App -->
+                            <Button x:Name="BtnExitApp" Style="{StaticResource CircleIconBtn}" Width="20" Height="20"
+                                    ToolTip="Tắt Dynamic Island (Thoát hẳn ứng dụng)" Click="BtnExitApp_Click">
+                                <TextBlock Text="✕" FontSize="11" Foreground="#EF4444" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 3. MUSIC TASK (Large Zone: 640x135, Big Vinyl Disc with Full Album Art, Seekable Timeline) -->
+                    <Grid x:Name="ViewMusic" Visibility="Collapsed" Margin="20,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Big Rotating Vinyl Record (80px) -->
+                        <Border Grid.Column="0" Width="80" Height="80" CornerRadius="40" 
+                                Background="#0A0714" BorderThickness="2" BorderBrush="#C084FC" 
+                                Margin="0,0,18,0" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform>
+                                <RotateTransform x:Name="VinylRotate" Angle="0"/>
+                            </Border.RenderTransform>
+                            <Border.Effect>
+                                <DropShadowEffect Color="#C084FC" BlurRadius="22" ShadowDepth="0" Opacity="0.85"/>
+                            </Border.Effect>
                             <Grid>
-                                <TextBlock x:Name="TxtAiPlaceholder" Text="Ask AI or enter code command..." Foreground="#64748B" 
-                                           FontSize="13" VerticalAlignment="Center" IsHitTestVisible="False"/>
-                                <TextBox x:Name="InputAi" Background="Transparent" Foreground="#F8FAFC" BorderThickness="0" 
-                                         FontSize="13" VerticalAlignment="Center"
-                                         TextChanged="InputAi_TextChanged"
-                                         KeyDown="InputAi_KeyDown"/>
+                                <Ellipse Width="72" Height="72" Stroke="#2D2245" StrokeThickness="1"/>
+                                <Ellipse Width="62" Height="62" Stroke="#2D2245" StrokeThickness="1"/>
+                                <Ellipse x:Name="AlbumCoverEllipse" Width="58" Height="58">
+                                    <Ellipse.Fill>
+                                        <ImageBrush x:Name="AlbumCoverBrush" Stretch="UniformToFill"/>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                                <Ellipse Width="10" Height="10" Fill="#0A0714" Stroke="#A855F7" StrokeThickness="1"/>
+                                <TextBlock x:Name="TxtVinylCenterIcon" Text="🎵" FontSize="18" Foreground="#F8FAFC" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Grid>
                         </Border>
 
-                        <!-- Close Button -->
-                        <Button Grid.Column="2" Style="{StaticResource CircleIconBtn}" Margin="8,0,0,0" Click="BtnCloseToCompact_Click">
-                            <TextBlock Text="✕" FontSize="12"/>
-                        </Button>
-                    </Grid>
-
-                    <!-- Action Chips -->
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="48,12,0,0">
-                        <Button Style="{StaticResource AiChipStyle}" Content="⚡ Explain File" Margin="0,0,8,0" Click="ChipAction_Click"/>
-                        <Button Style="{StaticResource AiChipStyle}" Content="📝 Write Commit" Margin="0,0,8,0" Click="ChipAction_Click"/>
-                        <Button Style="{StaticResource ActionChipStyle}" Content="🔍 Code Review" Margin="0,0,8,0" Click="ChipAction_Click"/>
-                        <Button Style="{StaticResource ActionChipStyle}" Content="💻 Terminal" Click="ChipAction_Click"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- 3. PRIVACY RADAR SHIELD VIEW -->
-                <Grid x:Name="ViewPrivacy" Visibility="Collapsed" Margin="18,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Animated Shield Icon -->
-                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="20" Background="#3B1219" BorderThickness="1.5" BorderBrush="#F43F5E" Margin="0,0,14,0">
-                        <TextBlock Text="🛡️" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-
-                    <!-- Text description -->
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock Text="Privacy Radar Shield" Foreground="#F8FAFC" FontSize="14" FontWeight="Bold"/>
-                        <TextBlock Text="Microphone &amp; Sensor active in background" Foreground="#FB7185" FontSize="11.5" Margin="0,2,0,0"/>
-                    </StackPanel>
-
-                    <!-- Block Button -->
-                    <Button Grid.Column="2" Style="{StaticResource DangerButtonStyle}" Content="Block Now" VerticalAlignment="Center" Margin="0,0,10,0" Click="BtnBlockMic_Click"/>
-
-                    <!-- Close -->
-                    <Button Grid.Column="3" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Center" Click="BtnCloseToCompact_Click">
-                        <TextBlock Text="✕" FontSize="12"/>
-                    </Button>
-                </Grid>
-
-                <!-- 4. DROPZONE / FILE ACTIVITY VIEW -->
-                <Grid x:Name="ViewDropzone" Visibility="Collapsed" Margin="18,10"
-                      AllowDrop="True" Drop="Dropzone_Drop" DragOver="Dropzone_DragOver">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="12" Background="#1E293B" Margin="0,0,14,0">
-                        <TextBlock Text="📦" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="TxtFileName" Text="project-spec.zip" Foreground="#F8FAFC" FontSize="13.5" FontWeight="SemiBold"/>
-                        <TextBlock x:Name="TxtFileMeta" Text="3.8 MB • Created in ~/Downloads" Foreground="#94A3B8" FontSize="11.5" Margin="0,2,0,0"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                            <Button Style="{StaticResource ActionChipStyle}" Content="📂 Open Folder" Margin="0,0,6,0" Padding="8,4" FontSize="11" Click="BtnOpenDownloads_Click"/>
-                            <Button Style="{StaticResource ActionChipStyle}" Content="📋 Copy Path" Margin="0,0,6,0" Padding="8,4" FontSize="11" Click="BtnCopyPath_Click"/>
-                            <Button Style="{StaticResource AiChipStyle}" Content="✨ Ask AI" Padding="8,4" FontSize="11" Click="BtnAskAiFile_Click"/>
+                        <!-- Song Info & Seekable Slider -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtMusicTitle" Text="Đang chờ bài hát trên Spotify/Windows..." Foreground="#F8FAFC" FontSize="14.5" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                            <TextBlock x:Name="TxtMusicArtist" Text="Spotify • YouTube • Apple Music" Foreground="#A78BFA" FontSize="11.5" Margin="0,3,0,0"/>
+                            
+                            <Grid Margin="0,10,12,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="TxtCurrentTime" Grid.Column="0" Text="00:00" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <Slider x:Name="SliderMusicTime" Grid.Column="1" Minimum="0" Maximum="100" Value="0" 
+                                        IsMoveToPointEnabled="True" VerticalAlignment="Center" Cursor="Hand"
+                                        PreviewMouseDown="SliderMusicTime_PreviewMouseDown"
+                                        PreviewMouseUp="SliderMusicTime_PreviewMouseUp"/>
+                                <TextBlock x:Name="TxtTotalTime" Grid.Column="2" Text="00:00" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                            </Grid>
                         </StackPanel>
-                    </StackPanel>
 
-                    <Button Grid.Column="2" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Top" Click="BtnCloseToCompact_Click">
-                        <TextBlock Text="✕" FontSize="12"/>
-                    </Button>
-                </Grid>
-
-                <!-- 5. ORBITAL SATELLITE MODE VIEW -->
-                <Grid x:Name="ViewOrbital" Visibility="Collapsed" Margin="12">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-
-                    <!-- Header -->
-                    <Grid Grid.Row="0">
-                        <TextBlock Text="ORBITAL SYSTEM CONTROL" Foreground="#94A3B8" FontSize="11" FontWeight="Bold" 
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        <Button Style="{StaticResource CircleIconBtn}" HorizontalAlignment="Right" Click="BtnCloseToCompact_Click">
-                            <TextBlock Text="✕" FontSize="12"/>
-                        </Button>
+                        <!-- Controls -->
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource MediaControlBtn}" ToolTip="Bài trước" Click="BtnMediaPrev_Click" Margin="0,0,6,0">
+                                <TextBlock Text="⏮️" FontSize="14"/>
+                            </Button>
+                            <Button x:Name="BtnPlayPause" Style="{StaticResource MediaControlBtn}" ToolTip="Phát / Dừng" Click="BtnMediaPlayPause_Click" Margin="0,0,6,0">
+                                <TextBlock x:Name="TxtPlayPauseIcon" Text="▶️" FontSize="15"/>
+                            </Button>
+                            <Button Style="{StaticResource MediaControlBtn}" ToolTip="Bài tiếp" Click="BtnMediaNext_Click" Margin="0,0,8,0">
+                                <TextBlock Text="⏭️" FontSize="14"/>
+                            </Button>
+                            <Button Style="{StaticResource CircleIconBtn}" ToolTip="Thu nhỏ siêu gọn (tránh cấn tab)" Click="BtnMiniSize_Click" Margin="0,0,6,0">
+                                <TextBlock Text="➖" FontSize="11"/>
+                            </Button>
+                            <Button Style="{StaticResource CircleIconBtn}" ToolTip="Đóng" Click="BtnCloseToCompact_Click">
+                                <TextBlock Text="✕" FontSize="12"/>
+                            </Button>
+                        </StackPanel>
                     </Grid>
 
-                    <!-- Orbit Canvas -->
-                    <Canvas x:Name="OrbitCanvas" Grid.Row="1" Width="520" Height="220" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        
-                        <!-- Orbital Track Rings -->
-                        <Ellipse Canvas.Left="135" Canvas.Top="20" Width="250" Height="170" 
-                                 Stroke="#334155" StrokeDashArray="4 4" StrokeThickness="1.2" Opacity="0.6"/>
+                    <!-- 4. POMODORO TASK (Size: 480x100) -->
+                    <Grid x:Name="ViewPomodoro" Visibility="Collapsed" Margin="18,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
 
-                        <!-- Central Core Hub -->
-                        <Border Canvas.Left="220" Canvas.Top="65" Width="80" Height="80" CornerRadius="40" Background="#090B10"
-                                BorderThickness="2" BorderBrush="#38BDF8" Cursor="Hand" MouseLeftButtonDown="CoreHub_Click">
+                        <Border Grid.Column="0" Background="#291F03" BorderBrush="#FACC15" BorderThickness="1.5" CornerRadius="14" Padding="14,6" Margin="0,0,14,0">
                             <Border.Effect>
-                                <DropShadowEffect Color="#38BDF8" BlurRadius="20" ShadowDepth="0" Opacity="0.8"/>
+                                <DropShadowEffect Color="#EAB308" BlurRadius="16" ShadowDepth="0" Opacity="0.8"/>
                             </Border.Effect>
-                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="⚛️" FontSize="20" HorizontalAlignment="Center"/>
-                                <TextBlock Text="CORE" Foreground="#E2E8F0" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center"/>
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtPomodoroDigits" Text="25:00" Foreground="#FEF08A" FontSize="26" FontWeight="Bold" FontFamily="Consolas"/>
+                                <TextBlock x:Name="TxtPomodoroStatus" Text="FOCUS" Foreground="#CA8A04" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center"/>
                             </StackPanel>
                         </Border>
 
-                        <!-- Satellite 1: Music -->
-                        <Border x:Name="OrbMusic" Style="{StaticResource OrbitalBubbleStyle}" 
-                                Canvas.Left="115" Canvas.Top="75" Background="#2E1C0C" BorderBrush="#F59E0B" BorderThickness="1.5"
-                                ToolTip="Music Player" MouseLeftButtonDown="OrbMusic_Click">
-                            <Border.Effect><DropShadowEffect Color="#F59E0B" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
-                            <TextBlock Text="🎵" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Button x:Name="BtnPomo25" Style="{StaticResource ActionChipStyle}" Content="25m Focus" Margin="0,0,5,0" Click="BtnPomoPreset_Click"/>
+                                <Button x:Name="BtnPomo5" Style="{StaticResource ActionChipStyle}" Content="5m Break" Margin="0,0,5,0" Click="BtnPomoPreset_Click"/>
+                                <Button x:Name="BtnPomo15" Style="{StaticResource ActionChipStyle}" Content="15m Rest" Click="BtnPomoPreset_Click"/>
+                            </StackPanel>
+                            <ProgressBar x:Name="PomodoroBar" Height="4" Maximum="100" Value="100" Background="#1E293B" Foreground="#EAB308"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                            <Button x:Name="BtnPomoStartPause" Style="{StaticResource ActionChipStyle}" Content="▶ Start" Background="#3B2E05" BorderBrush="#EAB308" Foreground="#FEF08A" Margin="0,0,6,0" Click="BtnPomoStartPause_Click"/>
+                            <Button Style="{StaticResource ActionChipStyle}" Content="🔄" Margin="0,0,8,0" Click="BtnPomoReset_Click"/>
+                            <Button Style="{StaticResource CircleIconBtn}" Click="BtnCloseToCompact_Click">
+                                <TextBlock Text="✕" FontSize="12"/>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 5. SYSMON TASK (Size: 560x110) -->
+                    <Grid x:Name="ViewSysmon" Visibility="Collapsed" Margin="16,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- CPU -->
+                        <Border Grid.Column="0" Background="#0C2036" BorderBrush="#38BDF8" BorderThickness="1.2" CornerRadius="12" Padding="10,6" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="⚙️ CPU LOAD" Foreground="#7DD3FC" FontSize="10.5" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtSysCpu" Text="12%" Foreground="#F8FAFC" FontSize="17" FontWeight="Bold" Margin="0,2,0,0"/>
+                                <ProgressBar x:Name="ProgressSysCpu" Height="3.5" Margin="0,5,0,0" Background="#1E293B" Foreground="#0EA5E9" Value="12"/>
+                            </StackPanel>
                         </Border>
 
-                        <!-- Satellite 2: AI Hub -->
-                        <Border x:Name="OrbAi" Style="{StaticResource OrbitalBubbleStyle}" 
-                                Canvas.Left="175" Canvas.Top="10" Background="#261447" BorderBrush="#A855F7" BorderThickness="1.5"
-                                ToolTip="AI Assistant" MouseLeftButtonDown="OrbAi_Click">
-                            <Border.Effect><DropShadowEffect Color="#A855F7" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
-                            <TextBlock Text="🤖" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <!-- RAM -->
+                        <Border Grid.Column="1" Background="#191230" BorderBrush="#C084FC" BorderThickness="1.2" CornerRadius="12" Padding="10,6" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="📊 RAM USAGE" Foreground="#D8B4FE" FontSize="10.5" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtSysRam" Text="54%" Foreground="#F8FAFC" FontSize="17" FontWeight="Bold" Margin="0,2,0,0"/>
+                                <TextBlock x:Name="TxtSysRamGb" Text="8.6 GB / 16.0 GB" Foreground="#94A3B8" FontSize="9.5" Margin="0,2,0,0"/>
+                            </StackPanel>
                         </Border>
 
-                        <!-- Satellite 3: Privacy Shield -->
-                        <Border x:Name="OrbPrivacy" Style="{StaticResource OrbitalBubbleStyle}" 
-                                Canvas.Left="305" Canvas.Top="10" Background="#360E18" BorderBrush="#F43F5E" BorderThickness="1.5"
-                                ToolTip="Privacy Shield" MouseLeftButtonDown="OrbPrivacy_Click">
-                            <Border.Effect><DropShadowEffect Color="#F43F5E" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
-                            <TextBlock Text="🔒" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <!-- ROM & Battery -->
+                        <Border Grid.Column="2" Background="#062920" BorderBrush="#34D399" BorderThickness="1.2" CornerRadius="12" Padding="10,6" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock Text="💾 ROM &amp; POWER" Foreground="#6EE7B7" FontSize="10.5" FontWeight="Bold"/>
+                                <TextBlock x:Name="TxtSysBattery" Text="98% • Ổ C: 45%" Foreground="#F8FAFC" FontSize="12.5" FontWeight="Bold" Margin="0,2,0,0"/>
+                                <TextBlock x:Name="TxtSysUptime" Text="Uptime: 1d 4h" Foreground="#94A3B8" FontSize="9.5" Margin="0,3,0,0"/>
+                            </StackPanel>
                         </Border>
 
-                        <!-- Satellite 4: Dropzone -->
-                        <Border x:Name="OrbDrop" Style="{StaticResource OrbitalBubbleStyle}" 
-                                Canvas.Left="360" Canvas.Top="75" Background="#062E24" BorderBrush="#10B981" BorderThickness="1.5"
-                                ToolTip="Dropzone Files" MouseLeftButtonDown="OrbDrop_Click">
-                            <Border.Effect><DropShadowEffect Color="#10B981" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
-                            <TextBlock Text="📁" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Button Grid.Column="3" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Top" Click="BtnCloseToCompact_Click">
+                            <TextBlock Text="✕" FontSize="12"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- 6. NOTIFICATION TASK (Size: 620x145, Message Popup & Quick Reply) -->
+                    <Grid x:Name="ViewNotification" Visibility="Collapsed" Margin="16,10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Header: App Badge, Sender Name, Timestamp, Action Buttons -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- App Icon & Badge -->
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Border x:Name="BadgeAppIcon" Width="28" Height="28" CornerRadius="14" 
+                                        Background="#0068FF" Margin="0,0,10,0" VerticalAlignment="Center">
+                                    <Border.Effect>
+                                        <DropShadowEffect x:Name="BadgeAppGlow" Color="#0068FF" BlurRadius="12" ShadowDepth="0" Opacity="0.8"/>
+                                    </Border.Effect>
+                                    <TextBlock x:Name="TxtAppIcon" Text="💬" FontSize="14" Foreground="White" 
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock x:Name="TxtNotifySender" Text="Trần Hải Đăng" Foreground="#F8FAFC" FontSize="13.5" FontWeight="Bold" Margin="0,0,8,0"/>
+                                        <Border x:Name="BorderAppTag" Background="#0C2540" BorderBrush="#0284C7" BorderThickness="0.8" CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtAppTag" Text="Zalo" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock x:Name="TxtNotifyTime" Text="Vừa xong • Tin nhắn mới" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Right Controls: Demo New Message & Close -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="BtnSimulateMsg" Style="{StaticResource ActionChipStyle}" Content="🔔 Thử tin mới" 
+                                        ToolTip="Mô phỏng tin nhắn mới (Zalo, Messenger, Telegram)" Click="BtnSimulateMsg_Click" Margin="0,0,6,0"/>
+                                <Button Style="{StaticResource CircleIconBtn}" ToolTip="Thu nhỏ" Click="BtnMiniSize_Click" Margin="0,0,6,0">
+                                    <TextBlock Text="➖" FontSize="11"/>
+                                </Button>
+                                <Button Style="{StaticResource CircleIconBtn}" ToolTip="Đóng" Click="BtnCloseToCompact_Click">
+                                    <TextBlock Text="✕" FontSize="12"/>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Message Content Preview Bubble -->
+                        <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" 
+                                CornerRadius="10" Padding="12,7" Margin="0,8,0,8">
+                            <TextBlock x:Name="TxtNotifyContent" 
+                                       Text="Alo bạn ơi! Tài liệu thiết kế dự án đã hoàn thiện rồi nhé, bạn xem qua rồi phản hồi mình sớm nha!" 
+                                       Foreground="#E2E8F0" FontSize="12.5" TextWrapping="Wrap" MaxHeight="38" TextTrimming="CharacterEllipsis"/>
                         </Border>
 
-                        <!-- Satellite 5: System Health -->
-                        <Border x:Name="OrbSys" Style="{StaticResource OrbitalBubbleStyle}" 
-                                Canvas.Left="190" Canvas.Top="145" Background="#0C263B" BorderBrush="#0EA5E9" BorderThickness="1.5"
-                                ToolTip="System Health" MouseLeftButtonDown="OrbSys_Click">
-                            <Border.Effect><DropShadowEffect Color="#0EA5E9" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
-                            <TextBlock Text="💊" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <!-- Quick Reply Bar: Suggestions Chips + Input Box + Send Button -->
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0" Margin="0,0,8,0">
+                                <Border Background="#0B0F17" BorderBrush="#334155" BorderThickness="1" CornerRadius="14" Padding="12,5">
+                                    <Grid>
+                                        <TextBlock x:Name="TxtReplyPlaceholder" Text="Nhập nội dung trả lời nhanh..." Foreground="#64748B" 
+                                                   FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                        <TextBox x:Name="InputReply" Background="Transparent" Foreground="#F8FAFC" BorderThickness="0" 
+                                                 FontSize="12.5" VerticalAlignment="Center"
+                                                 TextChanged="InputReply_TextChanged"
+                                                 KeyDown="InputReply_KeyDown"/>
+                                    </Grid>
+                                </Border>
+                            </Grid>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Style="{StaticResource ActionChipStyle}" Content="👍 Ok bạn" Margin="0,0,4,0" Click="ChipReply_Click"/>
+                                <Button Style="{StaticResource ActionChipStyle}" Content="⏳ Đợi 5p" Margin="0,0,4,0" Click="ChipReply_Click"/>
+                                <Button x:Name="BtnSendReply" Style="{StaticResource ActionChipStyle}" 
+                                        Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
+                                        Content="➤ Gửi" Click="BtnSendReply_Click"/>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+
+                    <!-- 7. DROPZONE TASK (Size: 540x120) -->
+                    <Grid x:Name="ViewDropzone" Visibility="Collapsed" Margin="16,10"
+                          AllowDrop="True" Drop="Dropzone_Drop" DragOver="Dropzone_DragOver">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Width="48" Height="48" CornerRadius="14" Background="#062E24" BorderThickness="1.5" BorderBrush="#10B981" Margin="0,0,14,0">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#10B981" BlurRadius="16" ShadowDepth="0" Opacity="0.7"/>
+                            </Border.Effect>
+                            <TextBlock x:Name="TxtFileIcon" Text="📦" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
 
-                        <!-- Satellite 6: Pomodoro Focus -->
-                        <Border x:Name="OrbPomodoro" Style="{StaticResource OrbitalBubbleStyle}" 
-                                Canvas.Left="290" Canvas.Top="145" Background="#3B2E05" BorderBrush="#EAB308" BorderThickness="1.5"
-                                ToolTip="Pomodoro Timer" MouseLeftButtonDown="OrbPomodoro_Click">
-                            <Border.Effect><DropShadowEffect Color="#EAB308" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
-                            <TextBlock Text="⏱️" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="TxtFileName" Text="Kéo thả bất kỳ file nào từ Windows vào đây (hoặc chọn bên dưới)" Foreground="#F8FAFC" FontSize="13" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="TxtFileMeta" Text="Hỗ trợ xem trước, sao chép đường dẫn và giải thích code bằng AI" Foreground="#94A3B8" FontSize="11" Margin="0,2,0,0"/>
+                            
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Style="{StaticResource ActionChipStyle}" Content="📎 Chọn File từ máy" Margin="0,0,6,0" Click="BtnBrowseFile_Click"/>
+                                <Button Style="{StaticResource ActionChipStyle}" Content="📂 Mở thư mục" Margin="0,0,6,0" Click="BtnOpenDownloads_Click"/>
+                                <Button Style="{StaticResource ActionChipStyle}" Content="📋 Copy đường dẫn" Margin="0,0,6,0" Click="BtnCopyPath_Click"/>
+                                <Button Style="{StaticResource ActionChipStyle}" Content="💬 Gửi qua Tin nhắn" Click="BtnShareFile_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Top" Click="BtnCloseToCompact_Click">
+                            <TextBlock Text="✕" FontSize="12"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- 8. PRIVACY TASK (Size: 480x80) -->
+                    <Grid x:Name="ViewPrivacy" Visibility="Collapsed" Margin="18,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Width="42" Height="42" CornerRadius="21" Background="#3B1219" BorderThickness="1.5" BorderBrush="#F43F5E" Margin="0,0,14,0">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#F43F5E" BlurRadius="16" ShadowDepth="0" Opacity="0.8"/>
+                            </Border.Effect>
+                            <TextBlock Text="🛡️" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
 
-                    </Canvas>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Privacy Radar Shield" Foreground="#F8FAFC" FontSize="13.5" FontWeight="Bold"/>
+                            <TextBlock Text="Microphone &amp; Sensors active in background" Foreground="#FB7185" FontSize="11" Margin="0,2,0,0"/>
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Style="{StaticResource DangerButtonStyle}" Content="Block Now" VerticalAlignment="Center" Margin="0,0,10,0" Click="BtnBlockMic_Click"/>
+                        <Button Grid.Column="3" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Center" Click="BtnCloseToCompact_Click">
+                            <TextBlock Text="✕" FontSize="12"/>
+                        </Button>
+                    </Grid>
                 </Grid>
-
-            </Grid>
-        </Border>
+            </Border>
+        </Grid>
 
     </Grid>
 </Window>
