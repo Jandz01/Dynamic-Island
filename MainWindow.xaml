@@ -1,0 +1,410 @@
+<Window x:Class="DynamicIsland.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Dynamic Island"
+        Height="360" Width="840"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="{x:Null}"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <!-- Button Style for Chips and Actions -->
+        <Style x:Key="ActionChipStyle" TargetType="Button">
+            <Setter Property="Background" Value="#242832"/>
+            <Setter Property="Foreground" Value="#E2E8F0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#384152"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                CornerRadius="14" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#333A48"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#60A5FA"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#1E232D"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Accent Chip (AI Gradient style) -->
+        <Style x:Key="AiChipStyle" TargetType="Button" BasedOn="{StaticResource ActionChipStyle}">
+            <Setter Property="Background" Value="#2D2145"/>
+            <Setter Property="BorderBrush" Value="#8B5CF6"/>
+            <Setter Property="Foreground" Value="#E9D5FF"/>
+        </Style>
+
+        <!-- Danger Block Button Style -->
+        <Style x:Key="DangerButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#EF4444"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Padding" Value="14,6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" Background="{TemplateBinding Background}" 
+                                CornerRadius="14" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="#DC2626"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Icon Button Style (Circular) -->
+        <Style x:Key="CircleIconBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="14">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="b" Property="Background" Value="#334155"/>
+                                <Setter Property="Foreground" Value="#F8FAFC"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Orbital Bubble Style -->
+        <Style x:Key="OrbitalBubbleStyle" TargetType="Border">
+            <Setter Property="Width" Value="48"/>
+            <Setter Property="Height" Value="48"/>
+            <Setter Property="CornerRadius" Value="24"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5"/>
+            <Setter Property="RenderTransform">
+                <Setter.Value>
+                    <ScaleTransform x:Name="BubbleScale" ScaleX="1" ScaleY="1"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- Main Container -->
+    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+        
+        <!-- The Dynamic Island Card -->
+        <Border x:Name="IslandCard" 
+                Width="420" Height="42"
+                HorizontalAlignment="Center" VerticalAlignment="Top"
+                Margin="0,4,0,0"
+                CornerRadius="21"
+                Background="#10131A"
+                BorderThickness="1.2"
+                MouseLeftButtonDown="IslandCard_MouseLeftButtonDown"
+                MouseEnter="IslandCard_MouseEnter"
+                MouseLeave="IslandCard_MouseLeave">
+            
+            <!-- Glowing Outline Border (Multi-tone Neon Effect) -->
+            <Border.BorderBrush>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#60A5FA" Offset="0.0"/>
+                    <GradientStop Color="#A855F7" Offset="0.5"/>
+                    <GradientStop Color="#38BDF8" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.BorderBrush>
+
+            <!-- Soft Outer Glow -->
+            <Border.Effect>
+                <DropShadowEffect x:Name="CardGlow" 
+                                  Color="#38BDF8" 
+                                  BlurRadius="22" 
+                                  ShadowDepth="0" 
+                                  Opacity="0.45"/>
+            </Border.Effect>
+
+            <Grid ClipToBounds="True">
+                
+                <!-- 1. COMPACT NOTCH BAR VIEW -->
+                <Grid x:Name="ViewCompact" Visibility="Visible" VerticalAlignment="Center" Margin="14,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Time & Date -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="🕒" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="TxtClock" Text="12:00:00" Foreground="#F1F5F9" FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Battery & Quick Indicators in Center -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Border Background="#1E293B" CornerRadius="10" Padding="8,3" Margin="4,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="⚡" FontSize="11" Foreground="#38BDF8" Margin="0,0,4,0"/>
+                                <TextBlock x:Name="TxtBattery" Text="95%" Foreground="#E2E8F0" FontSize="11.5" FontWeight="Medium"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#1E293B" CornerRadius="10" Padding="8,3" Margin="4,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="📊" FontSize="11" Margin="0,0,4,0"/>
+                                <TextBlock x:Name="TxtRam" Text="RAM 48%" Foreground="#CBD5E1" FontSize="11.5"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Navigation Action Icons -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- AI Hub button -->
+                        <Button Style="{StaticResource CircleIconBtn}" ToolTip="AI Assistant Hub" Click="BtnSwitchAi_Click">
+                            <TextBlock Text="✨" FontSize="13"/>
+                        </Button>
+                        <!-- Orbital button -->
+                        <Button Style="{StaticResource CircleIconBtn}" ToolTip="Orbital Satellite View" Click="BtnSwitchOrbital_Click">
+                            <TextBlock Text="🪐" FontSize="13"/>
+                        </Button>
+                        <!-- Privacy button -->
+                        <Button Style="{StaticResource CircleIconBtn}" ToolTip="Privacy Radar Shield" Click="BtnSwitchPrivacy_Click">
+                            <TextBlock Text="🛡️" FontSize="13"/>
+                        </Button>
+                        <!-- Dropzone button -->
+                        <Button Style="{StaticResource CircleIconBtn}" ToolTip="Dropzone File Tray" Click="BtnSwitchDropzone_Click">
+                            <TextBlock Text="📁" FontSize="13"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 2. AI COMMAND BOX VIEW -->
+                <Grid x:Name="ViewAi" Visibility="Collapsed" Margin="16,12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Glowing AI Avatar -->
+                        <Border Grid.Column="0" Width="36" Height="36" CornerRadius="18" Margin="0,0,12,0">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#8B5CF6" Offset="0"/>
+                                    <GradientStop Color="#EC4899" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <TextBlock Text="✦" Foreground="White" FontSize="18" FontWeight="Bold" 
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- AI Input Box -->
+                        <Border Grid.Column="1" Background="#1A1E29" CornerRadius="16" BorderThickness="1" BorderBrush="#334155" Padding="12,6">
+                            <Grid>
+                                <TextBlock x:Name="TxtAiPlaceholder" Text="Ask AI or enter code command..." Foreground="#64748B" 
+                                           FontSize="13" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                <TextBox x:Name="InputAi" Background="Transparent" Foreground="#F8FAFC" BorderThickness="0" 
+                                         FontSize="13" VerticalAlignment="Center"
+                                         TextChanged="InputAi_TextChanged"
+                                         KeyDown="InputAi_KeyDown"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Close Button -->
+                        <Button Grid.Column="2" Style="{StaticResource CircleIconBtn}" Margin="8,0,0,0" Click="BtnCloseToCompact_Click">
+                            <TextBlock Text="✕" FontSize="12"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Action Chips -->
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="48,12,0,0">
+                        <Button Style="{StaticResource AiChipStyle}" Content="⚡ Explain File" Margin="0,0,8,0" Click="ChipAction_Click"/>
+                        <Button Style="{StaticResource AiChipStyle}" Content="📝 Write Commit" Margin="0,0,8,0" Click="ChipAction_Click"/>
+                        <Button Style="{StaticResource ActionChipStyle}" Content="🔍 Code Review" Margin="0,0,8,0" Click="ChipAction_Click"/>
+                        <Button Style="{StaticResource ActionChipStyle}" Content="💻 Terminal" Click="ChipAction_Click"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- 3. PRIVACY RADAR SHIELD VIEW -->
+                <Grid x:Name="ViewPrivacy" Visibility="Collapsed" Margin="18,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Animated Shield Icon -->
+                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="20" Background="#3B1219" BorderThickness="1.5" BorderBrush="#F43F5E" Margin="0,0,14,0">
+                        <TextBlock Text="🛡️" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <!-- Text description -->
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock Text="Privacy Radar Shield" Foreground="#F8FAFC" FontSize="14" FontWeight="Bold"/>
+                        <TextBlock Text="Microphone &amp; Sensor active in background" Foreground="#FB7185" FontSize="11.5" Margin="0,2,0,0"/>
+                    </StackPanel>
+
+                    <!-- Block Button -->
+                    <Button Grid.Column="2" Style="{StaticResource DangerButtonStyle}" Content="Block Now" VerticalAlignment="Center" Margin="0,0,10,0" Click="BtnBlockMic_Click"/>
+
+                    <!-- Close -->
+                    <Button Grid.Column="3" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Center" Click="BtnCloseToCompact_Click">
+                        <TextBlock Text="✕" FontSize="12"/>
+                    </Button>
+                </Grid>
+
+                <!-- 4. DROPZONE / FILE ACTIVITY VIEW -->
+                <Grid x:Name="ViewDropzone" Visibility="Collapsed" Margin="18,10"
+                      AllowDrop="True" Drop="Dropzone_Drop" DragOver="Dropzone_DragOver">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="40" Height="40" CornerRadius="12" Background="#1E293B" Margin="0,0,14,0">
+                        <TextBlock Text="📦" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtFileName" Text="project-spec.zip" Foreground="#F8FAFC" FontSize="13.5" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="TxtFileMeta" Text="3.8 MB • Created in ~/Downloads" Foreground="#94A3B8" FontSize="11.5" Margin="0,2,0,0"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Style="{StaticResource ActionChipStyle}" Content="📂 Open Folder" Margin="0,0,6,0" Padding="8,4" FontSize="11" Click="BtnOpenDownloads_Click"/>
+                            <Button Style="{StaticResource ActionChipStyle}" Content="📋 Copy Path" Margin="0,0,6,0" Padding="8,4" FontSize="11" Click="BtnCopyPath_Click"/>
+                            <Button Style="{StaticResource AiChipStyle}" Content="✨ Ask AI" Padding="8,4" FontSize="11" Click="BtnAskAiFile_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Button Grid.Column="2" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Top" Click="BtnCloseToCompact_Click">
+                        <TextBlock Text="✕" FontSize="12"/>
+                    </Button>
+                </Grid>
+
+                <!-- 5. ORBITAL SATELLITE MODE VIEW -->
+                <Grid x:Name="ViewOrbital" Visibility="Collapsed" Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Header -->
+                    <Grid Grid.Row="0">
+                        <TextBlock Text="ORBITAL SYSTEM CONTROL" Foreground="#94A3B8" FontSize="11" FontWeight="Bold" 
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Button Style="{StaticResource CircleIconBtn}" HorizontalAlignment="Right" Click="BtnCloseToCompact_Click">
+                            <TextBlock Text="✕" FontSize="12"/>
+                        </Button>
+                    </Grid>
+
+                    <!-- Orbit Canvas -->
+                    <Canvas x:Name="OrbitCanvas" Grid.Row="1" Width="520" Height="220" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        
+                        <!-- Orbital Track Rings -->
+                        <Ellipse Canvas.Left="135" Canvas.Top="20" Width="250" Height="170" 
+                                 Stroke="#334155" StrokeDashArray="4 4" StrokeThickness="1.2" Opacity="0.6"/>
+
+                        <!-- Central Core Hub -->
+                        <Border Canvas.Left="220" Canvas.Top="65" Width="80" Height="80" CornerRadius="40" Background="#090B10"
+                                BorderThickness="2" BorderBrush="#38BDF8" Cursor="Hand" MouseLeftButtonDown="CoreHub_Click">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#38BDF8" BlurRadius="20" ShadowDepth="0" Opacity="0.8"/>
+                            </Border.Effect>
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="⚛️" FontSize="20" HorizontalAlignment="Center"/>
+                                <TextBlock Text="CORE" Foreground="#E2E8F0" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Satellite 1: Music -->
+                        <Border x:Name="OrbMusic" Style="{StaticResource OrbitalBubbleStyle}" 
+                                Canvas.Left="115" Canvas.Top="75" Background="#2E1C0C" BorderBrush="#F59E0B" BorderThickness="1.5"
+                                ToolTip="Music Player" MouseLeftButtonDown="OrbMusic_Click">
+                            <Border.Effect><DropShadowEffect Color="#F59E0B" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
+                            <TextBlock Text="🎵" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- Satellite 2: AI Hub -->
+                        <Border x:Name="OrbAi" Style="{StaticResource OrbitalBubbleStyle}" 
+                                Canvas.Left="175" Canvas.Top="10" Background="#261447" BorderBrush="#A855F7" BorderThickness="1.5"
+                                ToolTip="AI Assistant" MouseLeftButtonDown="OrbAi_Click">
+                            <Border.Effect><DropShadowEffect Color="#A855F7" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
+                            <TextBlock Text="🤖" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- Satellite 3: Privacy Shield -->
+                        <Border x:Name="OrbPrivacy" Style="{StaticResource OrbitalBubbleStyle}" 
+                                Canvas.Left="305" Canvas.Top="10" Background="#360E18" BorderBrush="#F43F5E" BorderThickness="1.5"
+                                ToolTip="Privacy Shield" MouseLeftButtonDown="OrbPrivacy_Click">
+                            <Border.Effect><DropShadowEffect Color="#F43F5E" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
+                            <TextBlock Text="🔒" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- Satellite 4: Dropzone -->
+                        <Border x:Name="OrbDrop" Style="{StaticResource OrbitalBubbleStyle}" 
+                                Canvas.Left="360" Canvas.Top="75" Background="#062E24" BorderBrush="#10B981" BorderThickness="1.5"
+                                ToolTip="Dropzone Files" MouseLeftButtonDown="OrbDrop_Click">
+                            <Border.Effect><DropShadowEffect Color="#10B981" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
+                            <TextBlock Text="📁" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- Satellite 5: System Health -->
+                        <Border x:Name="OrbSys" Style="{StaticResource OrbitalBubbleStyle}" 
+                                Canvas.Left="190" Canvas.Top="145" Background="#0C263B" BorderBrush="#0EA5E9" BorderThickness="1.5"
+                                ToolTip="System Health" MouseLeftButtonDown="OrbSys_Click">
+                            <Border.Effect><DropShadowEffect Color="#0EA5E9" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
+                            <TextBlock Text="💊" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- Satellite 6: Pomodoro Focus -->
+                        <Border x:Name="OrbPomodoro" Style="{StaticResource OrbitalBubbleStyle}" 
+                                Canvas.Left="290" Canvas.Top="145" Background="#3B2E05" BorderBrush="#EAB308" BorderThickness="1.5"
+                                ToolTip="Pomodoro Timer" MouseLeftButtonDown="OrbPomodoro_Click">
+                            <Border.Effect><DropShadowEffect Color="#EAB308" BlurRadius="16" ShadowDepth="0" Opacity="0.65"/></Border.Effect>
+                            <TextBlock Text="⏱️" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+
+                    </Canvas>
+                </Grid>
+
+            </Grid>
+        </Border>
+
+    </Grid>
+</Window>
