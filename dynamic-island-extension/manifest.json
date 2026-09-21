@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Dynamic Island Notification Bridge",
+  "version": "1.0.0",
+  "description": "Kết nối trực tiếp tin nhắn Facebook và Zalo Web vào Dynamic Island trên Windows với tốc độ thời gian thực.",
+  "permissions": [],
+  "host_permissions": [
+    "https://*.facebook.com/*",
+    "https://*.messenger.com/*",
+    "https://*.zalo.me/*",
+    "http://127.0.0.1:5005/*",
+    "http://localhost:5005/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.facebook.com/*",
+        "https://*.messenger.com/*",
+        "https://*.zalo.me/*"
+      ],
+      "js": ["injected.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://*.facebook.com/*",
+        "https://*.messenger.com/*",
+        "https://*.zalo.me/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

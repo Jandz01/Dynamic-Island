@@ -24,3 +24,10 @@ publish/
 publish_test/
 *.zip
 *.nupkg
+
+# Python, PyInstaller & Logs
+__pycache__/
+*.pyc
+scripts/build/
+scripts/*.exe
+*.log

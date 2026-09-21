@@ -2,8 +2,11 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -27,7 +30,8 @@ namespace DynamicIsland
         Camera,
         Notification,
         Dropzone,
-        LockScreen
+        LockScreen,
+        Update
     }
 
     public partial class MainWindow : Window
@@ -158,12 +162,17 @@ namespace DynamicIsland
         private string _notebookUrl = "";
         private bool _isNotebookVerified = false;
 
-        // Persistent Deleted Notifications
+        // Persistent Deleted Notifications (both ID and Content Fingerprint)
         private readonly string _deletedNotifsPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "DynamicIsland", "deleted_notifs.txt"
         );
+        private readonly string _deletedNotifHashesPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DynamicIsland", "deleted_notif_hashes.txt"
+        );
         private readonly HashSet<long> _deletedNotificationIds = new();
+        private readonly HashSet<string> _deletedNotificationHashes = new(StringComparer.OrdinalIgnoreCase);
 
         public MainWindow()
         {
@@ -197,6 +206,15 @@ namespace DynamicIsland
             _clockTimer.Start();
             ClockTimer_Tick(null, EventArgs.Empty);
 
+            // Keep notch geometry 100% in sync with IslandCard width and height on every animation frame
+            IslandCard.SizeChanged += (s, e) =>
+            {
+                if (!_isDraggingLiquid && e.NewSize.Width > 20 && e.NewSize.Height > 20)
+                {
+                    UpdateNotchGeometry(e.NewSize.Width, e.NewSize.Height, 0, 0);
+                }
+            };
+
             // Orbit Rotation (VSync hardware accelerated via CompositionTarget.Rendering)
             CompositionTarget.Rendering += CompositionTarget_Rendering;
 
@@ -212,13 +230,19 @@ namespace DynamicIsland
             // Initialize Windows Media
             await InitMediaManagerAsync();
 
-            // Load permanently deleted notification IDs
+            // Load permanently deleted notification IDs & fingerprints
             LoadDeletedNotifications();
 
             // Initialize Real Windows Notification Service
             _realNotificationService.IsDeletedPredicate = id => _deletedNotificationIds.Contains(id);
+            _realNotificationService.IsNotificationDeletedPredicate = r =>
+                _deletedNotificationHashes.Contains(RealNotificationService.ComputeFingerprint(r.AppName, r.Sender, r.Message));
+            _realNotificationService.DeletedNotificationHashes = _deletedNotificationHashes;
             _realNotificationService.NotificationReceived += OnRealNotificationReceived;
             _realNotificationService.Start();
+
+            // Start Local HTTP Webhook Server for Zalo & Facebook messages (Port 5005)
+            StartLocalMessageApiServer();
 
             // Pre-load recent real notifications from user's system (excluding any deleted ones)
             var recent = _realNotificationService.GetRecentNotifications(10);
@@ -240,12 +264,31 @@ namespace DynamicIsland
             // Initialize NotebookLM configuration
             LoadNotebookLmConfig();
 
-            // Initial view: Compact Notch
+            // Initial view: Compact Notch (580px for spacious layout without overlap)
             ApplyState(IslandState.Compact, animate: false);
-            UpdateNotchGeometry(540, 38, 0, 0);
+            UpdateNotchGeometry(580, 38, 0, 0);
 
             // Update Notification UI with loaded notifications
             UpdateNotificationUI();
+
+            // Check if freshly updated
+            string[] launchArgs = Environment.GetCommandLineArgs();
+            for (int i = 0; i < launchArgs.Length; i++)
+            {
+                if (launchArgs[i] == "--updated")
+                {
+                    string ver = (i + 1 < launchArgs.Length) ? launchArgs[i + 1] : UpdateService.CurrentVersionString;
+                    _ = Dispatcher.InvokeAsync(async () =>
+                    {
+                        await Task.Delay(1200);
+                        ShowModernToast($"Đã cập nhật thành công lên {ver}! 🎉", "🚀", "#10B981");
+                    });
+                    break;
+                }
+            }
+
+            // Check for updates in background after startup
+            _ = CheckForUpdateInBackgroundAsync();
         }
 
         // Horizontal offset from screen center
@@ -334,20 +377,53 @@ namespace DynamicIsland
             }
             else
             {
-                // Deformed liquid notch: bottom edge sags down at sagX like organic liquid
+                // Deformed liquid notch: The notch bar and corners stay 100% horizontal and level!
+                // Only a localized liquid droop forms under sagX, mimicking viscous mercury/honey.
+                double dipWidth = 65.0; // localized pull span
+                double leftCornerEnd = E + R_bot;
+                double rightCornerStart = E + width - R_bot;
+
+                double dipLeft = Math.Clamp(sagX - dipWidth, leftCornerEnd + 8, rightCornerStart - 20);
+                double dipRight = Math.Clamp(sagX + dipWidth, dipLeft + 20, rightCornerStart - 8);
+                double actualTipX = (dipLeft + dipRight) / 2.0;
                 double dipY = height + sagY;
+
+                // Left ear flare & left vertical side
                 figure.Segments.Add(new BezierSegment(new Point(E * 0.5, 0), new Point(E, R_ear * 0.3), new Point(E, R_ear), true));
                 figure.Segments.Add(new LineSegment(new Point(E, height - R_bot), true));
                 
-                // Left curve into sagging liquid teardrop
-                figure.Segments.Add(new BezierSegment(new Point(E, height), new Point(sagX - 45, dipY), new Point(sagX - 15, dipY + 2), true));
+                // Left bottom corner (completely flat, standard radius - NEVER slants!)
+                figure.Segments.Add(new BezierSegment(new Point(E, height), new Point(leftCornerEnd - R_bot * 0.6, height), new Point(leftCornerEnd, height), true));
                 
-                // Rounded liquid teardrop hanging tip at sagX
-                figure.Segments.Add(new BezierSegment(new Point(sagX, dipY + 5), new Point(sagX, dipY + 5), new Point(sagX + 15, dipY + 2), true));
+                // Horizontal flat bottom line leading up to the localized fluid dip
+                if (dipLeft > leftCornerEnd)
+                {
+                    figure.Segments.Add(new LineSegment(new Point(dipLeft, height), true));
+                }
 
-                // Right curve out of sagging liquid teardrop
-                figure.Segments.Add(new BezierSegment(new Point(sagX + 45, dipY), new Point(E + width, height), new Point(E + width, height - R_bot), true));
+                // Fluid meniscus catenary dip entering droplet tip
+                double c1X = dipLeft + (actualTipX - dipLeft) * 0.45;
+                double c2X = actualTipX - 16;
+                figure.Segments.Add(new BezierSegment(new Point(c1X, height), new Point(c2X, dipY), new Point(actualTipX - 10, dipY + 2), true));
+
+                // Organic rounded bulbous droplet tip at actualTipX
+                figure.Segments.Add(new BezierSegment(new Point(actualTipX, dipY + 5), new Point(actualTipX, dipY + 5), new Point(actualTipX + 10, dipY + 2), true));
+
+                // Fluid meniscus catenary dip returning to horizontal bottom edge
+                double c3X = actualTipX + 16;
+                double c4X = dipRight - (dipRight - actualTipX) * 0.45;
+                figure.Segments.Add(new BezierSegment(new Point(c3X, dipY), new Point(c4X, height), new Point(dipRight, height), true));
+
+                // Horizontal flat bottom line continuing to the right corner
+                if (rightCornerStart > dipRight)
+                {
+                    figure.Segments.Add(new LineSegment(new Point(rightCornerStart, height), true));
+                }
+
+                // Right bottom corner (completely flat, standard radius - NEVER slants!)
+                figure.Segments.Add(new BezierSegment(new Point(rightCornerStart + R_bot * 0.4, height), new Point(E + width, height), new Point(E + width, height - R_bot), true));
                 
+                // Right vertical side & right ear flare
                 figure.Segments.Add(new LineSegment(new Point(E + width, R_ear), true));
                 figure.Segments.Add(new BezierSegment(new Point(E + width, R_ear * 0.3), new Point(E + width + E * 0.5, 0), new Point(E + width + E, 0), true));
             }
@@ -360,6 +436,9 @@ namespace DynamicIsland
 
         #region Viscous Liquid Rubber-Band Dragging
         private double _initialNotchHeight = 38;
+        private double _currentSagX = 292;
+        private double _currentSagY = 0;
+        private double _currentExtraHeight = 0;
 
         private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
         {
@@ -411,6 +490,127 @@ namespace DynamicIsland
                 _isDraggingHandle = false;
                 ((UIElement)sender).ReleaseMouseCapture();
                 e.Handled = true;
+            }
+        }
+        #endregion
+
+        #region Screen Capture, Recording & Custom Save Folder
+        private static readonly string CaptureConfigFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DynamicIsland",
+            "capture_folder.txt"
+        );
+
+        private string GetCaptureFolder()
+        {
+            try
+            {
+                if (File.Exists(CaptureConfigFile))
+                {
+                    string path = File.ReadAllText(CaptureConfigFile).Trim();
+                    if (!string.IsNullOrEmpty(path) && Directory.Exists(path))
+                    {
+                        return path;
+                    }
+                }
+            }
+            catch { }
+
+            string def = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+                "DynamicIsland_Captures"
+            );
+            try { Directory.CreateDirectory(def); } catch { }
+            return def;
+        }
+
+        private void SetCaptureFolder(string folderPath)
+        {
+            try
+            {
+                Directory.CreateDirectory(folderPath);
+                string dir = Path.GetDirectoryName(CaptureConfigFile)!;
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(CaptureConfigFile, folderPath);
+                UpdateCaptureFolderUi(folderPath);
+                ShowModernToast($"Đã đổi thư mục lưu:\n{folderPath}", "📁", "#10B981");
+            }
+            catch (Exception ex)
+            {
+                ShowModernToast("Không thể lưu cấu hình thư mục: " + ex.Message, "⚠️", "#EF4444");
+            }
+        }
+
+        private void UpdateCaptureFolderUi(string? path = null)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                string p = path ?? GetCaptureFolder();
+                if (TxtCaptureFolder != null)
+                {
+                    TxtCaptureFolder.Text = p;
+                    TxtCaptureFolder.ToolTip = $"Thư mục lưu ảnh và video:\n{p}";
+                }
+            });
+        }
+
+        private void BtnChangeCaptureFolder_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            try
+            {
+                var dialog = new Microsoft.Win32.OpenFolderDialog
+                {
+                    Title = "Chọn thư mục lưu ảnh chụp màn hình và video quay màn hình",
+                    InitialDirectory = GetCaptureFolder(),
+                    Multiselect = false
+                };
+
+                if (dialog.ShowDialog() == true && !string.IsNullOrWhiteSpace(dialog.FolderName))
+                {
+                    SetCaptureFolder(dialog.FolderName);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowModernToast("Lỗi mở chọn thư mục: " + ex.Message, "⚠️", "#EF4444");
+            }
+        }
+
+        private void BtnOpenCaptureFolder_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            try
+            {
+                string folder = GetCaptureFolder();
+                Directory.CreateDirectory(folder);
+                Process.Start(new ProcessStartInfo("explorer.exe", folder) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                ShowModernToast("Không thể mở thư mục: " + ex.Message, "⚠️", "#EF4444");
+            }
+        }
+
+        private void BtnRecordVideo_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            try
+            {
+                // Kích hoạt Snipping Tool quay video hoặc Game Bar Screen Recording
+                try
+                {
+                    Process.Start(new ProcessStartInfo("explorer.exe", "ms-gamebar:") { UseShellExecute = true });
+                }
+                catch
+                {
+                    Process.Start(new ProcessStartInfo("ms-screenclip:") { UseShellExecute = true });
+                }
+                ShowModernToast("Đang mở công cụ quay màn hình Windows...", "🎥", "#8B5CF6");
+            }
+            catch (Exception ex)
+            {
+                ShowModernToast("Không thể mở công cụ quay: " + ex.Message, "⚠️", "#EF4444");
             }
         }
 
@@ -470,7 +670,32 @@ namespace DynamicIsland
 
                 if (captured)
                 {
-                    ShowModernToast("Đã chụp và lưu ảnh vào Clipboard!", "📸", "#38BDF8");
+                    try
+                    {
+                        var img = Clipboard.GetImage();
+                        if (img != null)
+                        {
+                            string folder = GetCaptureFolder();
+                            Directory.CreateDirectory(folder);
+                            string fileName = $"Capture_{DateTime.Now:yyyyMMdd_HHmmss}.png";
+                            string filePath = Path.Combine(folder, fileName);
+                            using (var fs = new FileStream(filePath, FileMode.Create))
+                            {
+                                var encoder = new PngBitmapEncoder();
+                                encoder.Frames.Add(BitmapFrame.Create(img));
+                                encoder.Save(fs);
+                            }
+                            ShowModernToast($"Đã chụp và lưu ảnh vào:\n{fileName}", "📸", "#10B981");
+                        }
+                        else
+                        {
+                            ShowModernToast("Đã chụp và lưu ảnh vào Clipboard!", "📸", "#38BDF8");
+                        }
+                    }
+                    catch
+                    {
+                        ShowModernToast("Đã chụp và lưu ảnh vào Clipboard!", "📸", "#38BDF8");
+                    }
                 }
             }
             catch
@@ -515,24 +740,69 @@ namespace DynamicIsland
             if (deltaY > 2)
             {
                 double clampedDeltaY = Math.Max(0, deltaY);
-                // Physical elastic resistance curve: strictly capped at max 46px!
+                // Physical elastic resistance curve: capped smoothly at max 46px
                 double factor = 1.0 - Math.Exp(-clampedDeltaY / 55.0);
                 double sagY = 46.0 * factor;
                 double extraHeight = 16.0 * factor;
 
-                double E = 22;
-                double minX = Math.Min(E + 10, E + IslandCard.Width / 2);
-                double maxX = Math.Max(minX, E + IslandCard.Width - 10);
-                double sagX = Math.Clamp(cur.X, minX, maxX);
+                // Localized sag follows cursor position organically within the notch width
+                double sagX = Math.Clamp(cur.X, 60, IslandCard.Width + 44 - 60);
+
+                _currentSagX = sagX;
+                _currentSagY = sagY;
+                _currentExtraHeight = extraHeight;
 
                 UpdateNotchGeometry(IslandCard.Width, _initialNotchHeight, sagX, sagY);
                 IslandCard.Height = _initialNotchHeight + extraHeight;
             }
             else
             {
+                _currentSagY = 0;
+                _currentExtraHeight = 0;
                 UpdateNotchGeometry(IslandCard.Width, _initialNotchHeight, 0, 0);
                 IslandCard.Height = _initialNotchHeight;
             }
+        }
+
+        private void AnimateNotchSnapBack(double startSagX, double startSagY, double startExtraHeight)
+        {
+            if (startSagY <= 0.5)
+            {
+                UpdateNotchGeometry(IslandCard.Width, _initialNotchHeight, 0, 0);
+                IslandCard.Height = _initialNotchHeight;
+                return;
+            }
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            const double totalMs = 280.0;
+            double w = IslandCard.Width;
+            double h0 = _initialNotchHeight;
+
+            EventHandler? onRendering = null;
+            onRendering = (s, e) =>
+            {
+                double elapsed = sw.ElapsedMilliseconds;
+                if (elapsed >= totalMs)
+                {
+                    CompositionTarget.Rendering -= onRendering;
+                    UpdateNotchGeometry(w, h0, 0, 0);
+                    IslandCard.Height = h0;
+                    _currentSagY = 0;
+                    _currentExtraHeight = 0;
+                    return;
+                }
+
+                double t = elapsed / totalMs;
+                // Smooth viscous cubic snap-back
+                double progress = 1.0 - Math.Pow(1.0 - t, 3.0);
+                double currentSag = startSagY * (1.0 - progress);
+                double currentExtra = startExtraHeight * (1.0 - progress);
+
+                UpdateNotchGeometry(w, h0, startSagX, currentSag);
+                IslandCard.Height = h0 + currentExtra;
+            };
+
+            CompositionTarget.Rendering += onRendering;
         }
 
         private void Window_PreviewMouseUp(object sender, MouseButtonEventArgs e)
@@ -545,7 +815,11 @@ namespace DynamicIsland
                 _isDraggingLiquid = false;
                 NotchRoot.ReleaseMouseCapture();
 
-                // Snap notch back to rest immediately
+                _currentSagX = 0;
+                _currentSagY = 0;
+                _currentExtraHeight = 0;
+
+                // Snap notch back to rest immediately without frame drops
                 UpdateNotchGeometry(IslandCard.Width, _initialNotchHeight, 0, 0);
                 IslandCard.Height = _initialNotchHeight;
 
@@ -577,10 +851,70 @@ namespace DynamicIsland
                 CloseCameraAppIfRunning();
             }
 
+            // If we are currently in an expanded planet/task (Music, Camera, Notification, Pomodoro, Dropzone, etc.)
+            // The user explicitly requires: "yêu cầu khi đóng hành tinh thì thu nhỏ lại cái dynamic island xong bắt đầu có giọt nước xuống"
+            if (_currentState != IslandState.Compact && _currentState != IslandState.Mini)
+            {
+                // Step 1: First shrink the expanded dynamic island smoothly back to Compact!
+                var shrinkDuration = TimeSpan.FromMilliseconds(240);
+                var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+
+                double currentW = IslandCard.ActualWidth > 0 ? IslandCard.ActualWidth : IslandCard.Width;
+                double currentH = IslandCard.ActualHeight > 0 ? IslandCard.ActualHeight : IslandCard.Height;
+
+                // Hide all subviews and show Compact
+                ViewMini.Visibility = Visibility.Collapsed;
+                ViewMusic.Visibility = Visibility.Collapsed;
+                ViewPomodoro.Visibility = Visibility.Collapsed;
+                ViewCamera.Visibility = Visibility.Collapsed;
+                ViewNotification.Visibility = Visibility.Collapsed;
+                ViewDropzone.Visibility = Visibility.Collapsed;
+                ViewLockScreen.Visibility = Visibility.Collapsed;
+                ViewUpdate.Visibility = Visibility.Collapsed;
+                ViewCompact.Visibility = Visibility.Visible;
+                CardGlow.Color = (Color)ColorConverter.ConvertFromString("#38BDF8");
+
+                _currentState = IslandState.Compact;
+                _initialNotchHeight = 38;
+
+                var animW = new DoubleAnimation(currentW, 580, shrinkDuration) { EasingFunction = ease };
+                var animH = new DoubleAnimation(currentH, 38, shrinkDuration) { EasingFunction = ease };
+
+                animH.Completed += (s, e) =>
+                {
+                    IslandCard.BeginAnimation(WidthProperty, null);
+                    IslandCard.BeginAnimation(HeightProperty, null);
+                    IslandCard.Width = 580;
+                    IslandCard.Height = 38;
+                    UpdateNotchGeometry(580, 38, 0, 0);
+
+                    // Step 2: "Xong bắt đầu có giọt nước xuống" - NOW drop the droplet from compact notch!
+                    StartDropletDescent();
+                };
+
+                IslandCard.BeginAnimation(WidthProperty, animW);
+                IslandCard.BeginAnimation(HeightProperty, animH);
+                return;
+            }
+
+            // If already in Compact: start droplet descent immediately!
+            StartDropletDescent();
+        }
+
+        private void StartDropletDescent()
+        {
             // Drop straight down along the center vertical axis: X = 474 (Window center: 490 - 16)
             double centerX = 474;
-            double startY = Math.Max(25, _initialNotchHeight - 8);
-            double targetY = 114; // Center of Black Hole (Y=150 minus droplet bulb center 36)
+            // Always starts cleanly at the bottom edge of the compact notch (38 - 8 = 30)
+            double startY = 30;
+            // Target is Center of Black Hole: Y=150 minus droplet bulb center 36 = 114
+            double targetY = 114;
+
+            // Explicitly clear all previous animation clocks on FallingDroplet to prevent WPF holding clocks
+            FallingDroplet.BeginAnimation(Canvas.TopProperty, null);
+            FallingDroplet.BeginAnimation(OpacityProperty, null);
+            FallingDropletScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            FallingDropletScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
 
             Canvas.SetLeft(FallingDroplet, centerX);
             Canvas.SetTop(FallingDroplet, startY);
@@ -589,8 +923,14 @@ namespace DynamicIsland
             FallingDropletScale.ScaleX = 0.85;
             FallingDropletScale.ScaleY = 1.0;
 
-            // Straight vertical drop (NO X drift, perfectly centered!)
-            var dropDuration = TimeSpan.FromMilliseconds(260);
+            // Ensure orbital view is Collapsed during drop for 0 GPU/CPU overhead (silky-smooth 120 FPS!)
+            ViewOrbital.Visibility = Visibility.Collapsed;
+            NotchRoot.BeginAnimation(OpacityProperty, null);
+            NotchRoot.Opacity = 1.0;
+            NotchRoot.Visibility = Visibility.Visible;
+
+            // Straight vertical drop (duration: 340ms - fluid, natural speed, NO frame drop!)
+            var dropDuration = TimeSpan.FromMilliseconds(340);
             var dropYAnim = new DoubleAnimation(startY, targetY, dropDuration)
             {
                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
@@ -609,16 +949,25 @@ namespace DynamicIsland
             dropYAnim.Completed += (s, e) =>
             {
                 // Impact & Splash: Droplet squashes and dissipates into the black hole!
-                var splashDuration = TimeSpan.FromMilliseconds(110);
-                var squashXAnim = new DoubleAnimation(0.72, 1.6, splashDuration)
+                var splashDuration = TimeSpan.FromMilliseconds(120);
+                var squashXAnim = new DoubleAnimation(0.72, 1.8, splashDuration)
                 {
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
                 };
-                var squashYAnim = new DoubleAnimation(1.35, 0.25, splashDuration)
+                var squashYAnim = new DoubleAnimation(1.35, 0.22, splashDuration)
                 {
                     EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
                 };
                 var fadeOutAnim = new DoubleAnimation(1.0, 0.0, splashDuration);
+
+                fadeOutAnim.Completed += (s2, e2) =>
+                {
+                    FallingDroplet.BeginAnimation(Canvas.TopProperty, null);
+                    FallingDroplet.BeginAnimation(OpacityProperty, null);
+                    FallingDropletScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                    FallingDropletScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                    FallingDroplet.Opacity = 0.0;
+                };
 
                 FallingDropletScale.BeginAnimation(ScaleTransform.ScaleXProperty, squashXAnim);
                 FallingDropletScale.BeginAnimation(ScaleTransform.ScaleYProperty, squashYAnim);
@@ -627,10 +976,10 @@ namespace DynamicIsland
                 // Switch to Orbital mode & Black Hole pop-in animation
                 SwitchState(IslandState.Orbital);
 
-                // Pop-in Black Hole accretion disk
-                var bhPopAnim = new DoubleAnimation(0.2, 1.0, TimeSpan.FromMilliseconds(320))
+                // Pop-in Black Hole accretion disk (from 0.0 to 1.0 at arrival)
+                var bhPopAnim = new DoubleAnimation(0.0, 1.0, TimeSpan.FromMilliseconds(300))
                 {
-                    EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.4 }
+                    EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.35 }
                 };
                 BlackHoleScale.BeginAnimation(ScaleTransform.ScaleXProperty, bhPopAnim);
                 BlackHoleScale.BeginAnimation(ScaleTransform.ScaleYProperty, bhPopAnim);
@@ -648,18 +997,31 @@ namespace DynamicIsland
         #region Real Hardware Metrics (Clock, RAM, ROM, Battery, CPU)
         private void ClockTimer_Tick(object? sender, EventArgs e)
         {
-            // Real Clock with Vietnamese Day & Date
             var viCulture = new CultureInfo("vi-VN");
-            TxtClock.Text = DateTime.Now.ToString("HH:mm:ss dddd, dd/MM", viCulture);
+            string dayAbbr = DateTime.Now.ToString("ddd", viCulture);
 
-            // Real RAM
+            if (PillCompactNotification != null && PillCompactNotification.Visibility == Visibility.Visible)
+            {
+                TxtClock.Text = DateTime.Now.ToString("HH:mm:ss");
+            }
+            else
+            {
+                TxtClock.Text = DateTime.Now.ToString($"HH:mm:ss  '{dayAbbr}', dd/MM");
+            }
+            PillClock.ToolTip = $"🕒 THỜI GIAN HỆ THỐNG\n• Giờ: {DateTime.Now:HH:mm:ss}\n• Ngày: {DateTime.Now.ToString("dddd, ngày dd/MM/yyyy", viCulture)}";
+
+            // Real RAM with exact GB calculation & rich tooltip
             var memStatus = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX)) };
             if (GlobalMemoryStatusEx(ref memStatus))
             {
                 TxtRam.Text = $"{memStatus.dwMemoryLoad}%";
+                double totalRamGb = memStatus.ullTotalPhys / (1024.0 * 1024.0 * 1024.0);
+                double freeRamGb = memStatus.ullAvailPhys / (1024.0 * 1024.0 * 1024.0);
+                double usedRamGb = totalRamGb - freeRamGb;
+                PillRam.ToolTip = $"🧠 BỘ NHỚ RAM\n• Đang dùng: {usedRamGb:F1} GB / {totalRamGb:F1} GB ({memStatus.dwMemoryLoad}%)\n• Còn trống: {freeRamGb:F1} GB";
             }
 
-            // Real ROM (Drive C)
+            // Real ROM (Drive C) with exact GB calculation & rich tooltip
             try
             {
                 var drive = new DriveInfo("C");
@@ -668,24 +1030,33 @@ namespace DynamicIsland
                 double usedRom = totalRom - freeRom;
                 int romPercent = (int)((usedRom / totalRom) * 100);
                 TxtRom.Text = $"{romPercent}%";
+                double totalRomGb = totalRom / (1024.0 * 1024.0 * 1024.0);
+                double freeRomGb = freeRom / (1024.0 * 1024.0 * 1024.0);
+                double usedRomGb = usedRom / (1024.0 * 1024.0 * 1024.0);
+                PillRom.ToolTip = $"💾 Ổ ĐĨA HỆ THỐNG (C:)\n• Đã dùng: {usedRomGb:F1} GB / {totalRomGb:F1} GB ({romPercent}%)\n• Còn trống: {freeRomGb:F1} GB";
             }
             catch
             {
                 TxtRom.Text = "45%";
+                PillRom.ToolTip = "💾 Ổ đĩa hệ thống (C:)";
             }
 
-            // Real Battery
+            // Real Battery with charging status & rich tooltip
             if (GetSystemPowerStatus(out SYSTEM_POWER_STATUS powerStatus))
             {
                 if (powerStatus.BatteryLifePercent != 255)
                 {
                     TxtBattery.Text = $"{powerStatus.BatteryLifePercent}%";
-                    TxtBatteryIcon.Text = powerStatus.ACLineStatus == 1 ? "⚡" : "🔋";
+                    bool isCharging = powerStatus.ACLineStatus == 1;
+                    TxtBatteryIcon.Text = isCharging ? "⚡" : "🔋";
+                    string statusStr = isCharging ? "Đang cắm sạc (AC)" : "Đang dùng Pin";
+                    PillBattery.ToolTip = $"🔋 PIN THIẾT BỊ\n• Mức pin: {powerStatus.BatteryLifePercent}%\n• Trạng thái nguồn: {statusStr}";
                 }
                 else
                 {
                     TxtBattery.Text = "AC";
                     TxtBatteryIcon.Text = "⚡";
+                    PillBattery.ToolTip = "⚡ Nguồn điện trực tiếp AC (Máy bàn hoặc cắm nguồn liên tục)";
                 }
             }
         }
@@ -1026,52 +1397,103 @@ namespace DynamicIsland
         #endregion
 
         #region Reverse Teardrop Droplet Flow to Task
-        private void TriggerReverseDropletToTask(Border orb, IslandState targetState)
+        private void TriggerReverseDropletToTask(Border? orb, IslandState targetState)
         {
-            Border[] orbs = [OrbMusic, OrbNotify, OrbLockScreen, OrbDrop, OrbCamera, OrbPomodoro];
-            int idx = Array.IndexOf(orbs, orb);
-            double angle = idx >= 0 ? _orbitAngle + idx * (Math.PI * 2 / orbs.Length) : 0;
-            double radiusX = 200 * _bloomProgress;
-            double radiusY = 100 * _bloomProgress;
-            double orbCenterX = 340 + radiusX * Math.Cos(angle);
-            double orbCenterY = 150 + radiusY * Math.Sin(angle);
+            // Halt orbital calculations immediately so CPU/GPU focus completely on droplet rendering
+            _isOrbitPaused = true;
+            _preventPullDownUntil = DateTime.UtcNow.AddMilliseconds(800);
 
-            double startX = orbCenterX - 16;
-            double startY = orbCenterY - 28;
+            // Core Center coordinates: Center of window 474 (490 - 16), Core Center Y = 114
+            double coreX = 474;
+            double coreY = 114;
+            // Flows up near the top screen edge without piercing through (stops gracefully inside notch at Y=14)
+            double targetY = 14;
 
-            // Inherit planet's color
-            ReverseDroplet.Stroke = orb.BorderBrush;
-            ReverseDroplet.Fill = orb.Background;
-            if (orb.Effect is DropShadowEffect ds)
+            if (orb != null)
             {
-                ReverseDropletGlow.Color = ds.Color;
+                // Inherit the clicked planet's color aura
+                ReverseDroplet.Stroke = orb.BorderBrush;
+                ReverseDroplet.Fill = orb.Background;
+                if (orb.Effect is DropShadowEffect ds)
+                {
+                    ReverseDropletGlow.Color = ds.Color;
+                }
+            }
+            else
+            {
+                // Core Black Hole amber aura
+                ReverseDroplet.Stroke = (Brush)new BrushConverter().ConvertFromString("#F97316")!;
+                ReverseDroplet.Fill = (Brush)new BrushConverter().ConvertFromString("#020202")!;
+                ReverseDropletGlow.Color = (Color)ColorConverter.ConvertFromString("#EA580C");
             }
 
-            Canvas.SetLeft(ReverseDroplet, startX);
-            Canvas.SetTop(ReverseDroplet, startY);
+            // CRITICAL: Explicitly clear all previous animation clocks on ReverseDroplet to prevent WPF holding clocks
+            ReverseDroplet.BeginAnimation(Canvas.TopProperty, null);
+            ReverseDroplet.BeginAnimation(OpacityProperty, null);
+            ReverseDropletScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            ReverseDropletScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+
+            // Spawn strictly at the Core center
+            Canvas.SetLeft(ReverseDroplet, coreX);
+            Canvas.SetTop(ReverseDroplet, coreY);
             ReverseDroplet.Opacity = 1.0;
 
-            // Animate droplet flowing upwards into the top notch
-            var upAnim = new DoubleAnimation(startY, 0, TimeSpan.FromMilliseconds(320))
+            ReverseDropletScale.ScaleX = 1.0;
+            ReverseDropletScale.ScaleY = 0.85;
+
+            // Fluid vertical flow from Core UP towards top edge (duration: 340ms - snappy and responsive)
+            var flowDuration = TimeSpan.FromMilliseconds(340);
+            var upAnim = new DoubleAnimation(coreY, targetY, flowDuration)
             {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
-            var xAnim = new DoubleAnimation(startX, 474, TimeSpan.FromMilliseconds(320))
+
+            // Organic vertical elongation pointing towards the notch (capped at 1.25 so it never pierces screen edge)
+            var stretchYAnim = new DoubleAnimation(0.85, 1.25, flowDuration)
             {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
             };
+            var stretchXAnim = new DoubleAnimation(1.0, 0.78, flowDuration)
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+            };
+
+            // Guaranteed visibility: 1.0 from 0ms to 240ms, then smoothly dissolves in the final 100ms as it merges into the notch!
+            var opacityAnim = new DoubleAnimationUsingKeyFrames();
+            opacityAnim.KeyFrames.Add(new DiscreteDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.Zero)));
+            opacityAnim.KeyFrames.Add(new LinearDoubleKeyFrame(1.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(240))));
+            opacityAnim.KeyFrames.Add(new SplineDoubleKeyFrame(0.0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(340))));
 
             upAnim.Completed += (s, e) =>
             {
-                ReverseDroplet.Opacity = 0;
+                _isOrbitPaused = false;
+                // Clear all animations completely
+                ReverseDroplet.BeginAnimation(Canvas.TopProperty, null);
+                ReverseDroplet.BeginAnimation(OpacityProperty, null);
+                ReverseDropletScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+                ReverseDropletScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+                ReverseDroplet.Opacity = 0.0;
+
+                ViewOrbital.Visibility = Visibility.Collapsed;
+                ViewOrbital.BeginAnimation(OpacityProperty, null);
+                ViewOrbital.Opacity = 1.0;
+
+                NotchRoot.BeginAnimation(OpacityProperty, null);
+                NotchRoot.Opacity = 1.0;
+                NotchRoot.Visibility = Visibility.Visible;
+
                 // Morph into target dynamic island
                 ApplyState(targetState, animate: true);
             };
 
             ReverseDroplet.BeginAnimation(Canvas.TopProperty, upAnim);
-            ReverseDroplet.BeginAnimation(Canvas.LeftProperty, xAnim);
+            ReverseDropletScale.BeginAnimation(ScaleTransform.ScaleYProperty, stretchYAnim);
+            ReverseDropletScale.BeginAnimation(ScaleTransform.ScaleXProperty, stretchXAnim);
+            ReverseDroplet.BeginAnimation(OpacityProperty, opacityAnim);
 
-            ViewOrbital.Visibility = Visibility.Collapsed;
+            // Smoothly fade out orbital planets as droplet shoots upwards
+            var orbitFade = new DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(260));
+            ViewOrbital.BeginAnimation(OpacityProperty, orbitFade);
         }
         #endregion
 
@@ -1411,6 +1833,23 @@ namespace DynamicIsland
             UpdateNotebookLmStatus(authentic, url, _notebookName, hasWindow);
             SaveNotebookLmConfig(url, _notebookName);
 
+            if (authentic)
+            {
+                _ = Task.Run(async () =>
+                {
+                    string? realTitle = await ResolveNotebookViaApiAsync(url);
+                    if (!string.IsNullOrWhiteSpace(realTitle))
+                    {
+                        Dispatcher.Invoke(() =>
+                        {
+                            _notebookName = realTitle;
+                            TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
+                            SaveNotebookLmConfig(url, _notebookName);
+                        });
+                    }
+                });
+            }
+
             if (showToast)
             {
                 if (hasWindow && !string.IsNullOrWhiteSpace(_notebookName))
@@ -1419,7 +1858,7 @@ namespace DynamicIsland
                 }
                 else if (authentic)
                 {
-                    ShowModernToast("Đã xác thực Sổ tay NotebookLM thật!", "🟢", "#10B981");
+                    ShowModernToast("Đã kết nối Sổ tay NotebookLM qua API!", "🟢", "#10B981");
                 }
                 else
                 {
@@ -1506,6 +1945,29 @@ namespace DynamicIsland
 
             SaveNotebookLmConfig(url, _notebookName);
             UpdateNotebookLmStatus(authentic, url, _notebookName, false);
+
+            if (authentic)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var realTitle = await ResolveNotebookViaApiAsync(url);
+                        if (!string.IsNullOrWhiteSpace(realTitle))
+                        {
+                            await Dispatcher.InvokeAsync(() =>
+                            {
+                                _notebookName = realTitle;
+                                TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
+                                SaveNotebookLmConfig(url, _notebookName);
+                                UpdateNotebookLmStatus(true, url, _notebookName, false);
+                                ShowModernToast($"🟢 Đã liên kết: '{_notebookName}'!", "⚡", "#10B981");
+                            });
+                        }
+                    }
+                    catch { }
+                });
+            }
 
             if (showToast)
             {
@@ -1945,6 +2407,132 @@ namespace DynamicIsland
             }
         }
 
+        #region NotebookLM Direct API Bridge Methods
+        private static string GetBridgeScriptPath()
+        {
+            string p1 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scripts", "notebooklm_bridge.py");
+            if (File.Exists(p1)) return p1;
+            string p2 = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "scripts", "notebooklm_bridge.py");
+            if (File.Exists(p2)) return Path.GetFullPath(p2);
+            return p1;
+        }
+
+        private static (string fileName, string argsPrefix) GetBridgeCommand(string actionArgs)
+        {
+            // Prefer standalone compiled executable (No Python installation required on user's machine!)
+            string[] exeCandidates = [
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "scripts", "notebooklm_bridge.exe"),
+                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "scripts", "notebooklm_bridge.exe")
+            ];
+            foreach (var cand in exeCandidates)
+            {
+                if (File.Exists(cand))
+                {
+                    return (Path.GetFullPath(cand), actionArgs);
+                }
+            }
+
+            // Fallback to python script if standalone executable is not found
+            string scriptPath = GetBridgeScriptPath();
+            return ("python", $"\"{scriptPath}\" {actionArgs}");
+        }
+
+        private async Task<string?> ResolveNotebookViaApiAsync(string notebookUrl)
+        {
+            try
+            {
+                var (cmdExe, cmdArgs) = GetBridgeCommand($"--action resolve --notebook \"{notebookUrl}\"");
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = cmdExe,
+                    Arguments = cmdArgs,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = System.Text.Encoding.UTF8,
+                    StandardErrorEncoding = System.Text.Encoding.UTF8
+                };
+
+                using var proc = Process.Start(psi);
+                if (proc == null) return null;
+
+                string output = await proc.StandardOutput.ReadToEndAsync();
+                await proc.WaitForExitAsync();
+
+                if (string.IsNullOrWhiteSpace(output)) return null;
+
+                using var doc = System.Text.Json.JsonDocument.Parse(output);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("success", out var succProp) && succProp.GetBoolean())
+                {
+                    return root.TryGetProperty("title", out var tProp) ? tProp.GetString() : null;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Resolve API Error: {ex.Message}");
+            }
+            return null;
+        }
+
+        private async Task<bool> SendSourceToNotebookViaApiAsync(string notebookUrl, SourceType type, string targetPathOrUrl)
+        {
+            try
+            {
+                string argType = type == SourceType.File ? "file" : "url";
+                var (cmdExe, cmdArgs) = GetBridgeCommand($"--action add_source --notebook \"{notebookUrl}\" --type {argType} --target \"{targetPathOrUrl}\"");
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = cmdExe,
+                    Arguments = cmdArgs,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = System.Text.Encoding.UTF8,
+                    StandardErrorEncoding = System.Text.Encoding.UTF8
+                };
+
+                using var proc = Process.Start(psi);
+                if (proc == null) return false;
+
+                string output = await proc.StandardOutput.ReadToEndAsync();
+                await proc.WaitForExitAsync();
+
+                if (string.IsNullOrWhiteSpace(output)) return false;
+
+                using var doc = System.Text.Json.JsonDocument.Parse(output);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("success", out var succProp) && succProp.GetBoolean())
+                {
+                    string sourceTitle = root.TryGetProperty("title", out var tProp) ? tProp.GetString() ?? "" : "";
+                    string nbTitle = root.TryGetProperty("notebook_title", out var nbProp) ? nbProp.GetString() ?? "" : "";
+                    if (!string.IsNullOrWhiteSpace(nbTitle))
+                    {
+                        _notebookName = nbTitle;
+                        TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
+                    }
+                    TxtFileMeta.Text = $"✅ Đã thêm thẳng vào Nguồn NotebookLM: {sourceTitle}";
+                    ShowModernToast($"✅ Đã nạp thành công vào Nguồn: {sourceTitle}!", "⚡", "#10B981");
+                    return true;
+                }
+                else if (root.TryGetProperty("error", out var errProp))
+                {
+                    string errMsg = errProp.GetString() ?? "";
+                    ShowModernToast($"⚠️ {errMsg}", "⚠️", "#EF4444");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"API Bridge Error: {ex.Message}");
+            }
+            return false;
+        }
+        #endregion
+
         private async void BtnSendToNotebookLM_Click(object sender, RoutedEventArgs e)
         {
             string url = !string.IsNullOrWhiteSpace(_notebookUrl) ? _notebookUrl : (InputNotebookUrl?.Text ?? "").Trim();
@@ -1963,159 +2551,22 @@ namespace DynamicIsland
                 return;
             }
 
-            // 1. Prepare Clipboard data according to source type
-            if (_currentSourceType == SourceType.File)
-            {
-                try
-                {
-                    var dataObject = new DataObject();
-                    var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath! };
-                    dataObject.SetFileDropList(fileDrop);
+            string targetPayload = _currentSourceType == SourceType.File ? _currentFilePath! : _currentSourceUrl!;
 
-                    var fi = new FileInfo(_currentFilePath!);
-                    string ext = fi.Extension.ToLowerInvariant();
-                    if (ext == ".txt" || ext == ".md" || ext == ".csv" || ext == ".json" || ext == ".cs" || ext == ".py" || ext == ".js" || ext == ".html" || ext == ".xml")
-                    {
-                        if (fi.Length <= 2 * 1024 * 1024)
-                        {
-                            string text = File.ReadAllText(_currentFilePath!);
-                            dataObject.SetText(text);
-                        }
-                    }
-                    else
-                    {
-                        dataObject.SetText(_currentFilePath!);
-                    }
-                    Clipboard.SetDataObject(dataObject, true);
-                }
-                catch
-                {
-                    try
-                    {
-                        var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath! };
-                        Clipboard.SetFileDropList(fileDrop);
-                    }
-                    catch { }
-                }
-            }
-            else if (_currentSourceType == SourceType.Link)
+            // DIRECT API INJECTION: Background addition directly to NotebookLM Sources
+            // Pure background process: zero browser interference, zero window restoration, zero zoom!
+            TxtFileMeta.Text = "⚡ Đang nạp trực tiếp vào Nguồn Sổ tay qua API...";
+            ShowModernToast("⚡ Đang nạp thẳng vào Nguồn NotebookLM...", "⚡", "#38BDF8");
+
+            bool apiSuccess = await SendSourceToNotebookViaApiAsync(url, _currentSourceType, targetPayload);
+            if (apiSuccess)
             {
-                try
-                {
-                    Clipboard.SetText(_currentSourceUrl!);
-                }
-                catch { }
+                // Added seamlessly in background! Do NOT touch browser at all.
+                return;
             }
 
-            string sourceName = _currentSourceType == SourceType.File
-                ? Path.GetFileName(_currentFilePath!)
-                : _currentSourceUrl!;
-
-            // 2. Find running NotebookLM window/tab or active browser
-            IntPtr hWnd = FindNotebookLmWindow(out string windowTitle);
-
-            if (hWnd != IntPtr.Zero)
-            {
-                // EXISTING BROWSER/NOTEBOOKLM FOUND: Focus and bring to front without opening a new tab!
-                string detected = ExtractNotebookName(windowTitle, url);
-                if (!string.IsNullOrWhiteSpace(detected))
-                {
-                    _notebookName = detected;
-                    TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
-                }
-                string targetTitle = !string.IsNullOrWhiteSpace(_notebookName) ? _notebookName : "Sổ tay NotebookLM";
-
-                ShowWindow(hWnd, SW_RESTORE);
-                SetForegroundWindow(hWnd);
-
-                if (_currentSourceType == SourceType.Link)
-                {
-                    TxtFileMeta.Text = $"⚡ Đang tự động dán link vào {targetTitle}...";
-                    ShowModernToast($"Đang tự động dán link vào {targetTitle}...", "⚡", "#10B981");
-
-                    await Task.Delay(260);
-                    keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
-                    keybd_event(VK_V, 0, 0, UIntPtr.Zero);
-                    keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
-                    await Task.Delay(350);
-                    keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);
-                    keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
-                    TxtFileMeta.Text = $"✅ Đã add link nguồn vào {targetTitle}! (Không mở thêm tab)";
-                    ShowModernToast($"Đã add link nguồn vào {targetTitle}!", "✅", "#10B981");
-                }
-                else if (_currentSourceType == SourceType.File)
-                {
-                    TxtFileMeta.Text = $"✅ Đã chuyển đến {targetTitle}! Kéo khung tệp thả vào NotebookLM để nạp nguồn";
-                    ShowModernToast($"👉 Đã mở {targetTitle}! Kéo khung tệp trên Đảo thả vào NotebookLM bên dưới!", "⚡", "#10B981");
-
-                    await Task.Delay(250);
-                    // Dispatch Ctrl+V in case user is in an open file dialog or text input
-                    keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
-                    keybd_event(VK_V, 0, 0, UIntPtr.Zero);
-                    keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                }
-            }
-            else
-            {
-                // NO BROWSER RUNNING AT ALL: Only then open browser to the verified notebook URL
-                TxtFileMeta.Text = "🚀 Đang mở Sổ tay đã xác thực...";
-                ShowModernToast("Đang mở Sổ tay NotebookLM để nạp nguồn...", "🚀", "#38BDF8");
-
-                try
-                {
-                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                }
-                catch (Exception ex)
-                {
-                    ShowModernToast("Không thể mở trình duyệt: " + ex.Message, "⚠️", "#EF4444");
-                    return;
-                }
-
-                _ = Task.Run(async () =>
-                {
-                    for (int i = 0; i < 20; i++)
-                    {
-                        await Task.Delay(400);
-                        IntPtr newHwnd = FindNotebookLmWindow(out string newTitle);
-                        if (newHwnd != IntPtr.Zero)
-                        {
-                            await Task.Delay(1200);
-                            ShowWindow(newHwnd, SW_RESTORE);
-                            SetForegroundWindow(newHwnd);
-                            await Task.Delay(300);
-
-                            if (_currentSourceType == SourceType.Link)
-                            {
-                                keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
-                                keybd_event(VK_V, 0, 0, UIntPtr.Zero);
-                                keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                                keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
-                                await Task.Delay(350);
-                                keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);
-                                keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                            }
-
-                            Dispatcher.Invoke(() =>
-                            {
-                                string detected = ExtractNotebookName(newTitle, url);
-                                if (!string.IsNullOrWhiteSpace(detected))
-                                {
-                                    _notebookName = detected;
-                                    TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
-                                }
-                                TxtFileMeta.Text = "✅ Đã mở NotebookLM! Kéo thả khung tệp vào để nạp nguồn";
-                                ShowModernToast("Đã mở NotebookLM! Kéo khung tệp vào để nạp nguồn!", "✅", "#10B981");
-                            });
-                            break;
-                        }
-                    }
-                });
-            }
+            // Fallback error toast if API bridge fails
+            ShowModernToast("Không thể kết nối API nguồn NotebookLM. Vui lòng kiểm tra lại tài khoản hoặc link!", "⚠️", "#EF4444");
         }
 
         private void BtnClearFiles_Click(object sender, RoutedEventArgs e)
@@ -2203,7 +2654,7 @@ namespace DynamicIsland
         {
             _currentState = newState;
 
-            double targetWidth = 540;
+            double targetWidth = 560;
             double targetHeight = 38;
 
             // Hide subviews
@@ -2215,6 +2666,7 @@ namespace DynamicIsland
             ViewNotification.Visibility = Visibility.Collapsed;
             ViewDropzone.Visibility = Visibility.Collapsed;
             ViewLockScreen.Visibility = Visibility.Collapsed;
+            ViewUpdate.Visibility = Visibility.Collapsed;
 
             FrameworkElement targetView = ViewCompact;
 
@@ -2227,6 +2679,8 @@ namespace DynamicIsland
             else
             {
                 ViewOrbital.Visibility = Visibility.Collapsed;
+                NotchRoot.BeginAnimation(OpacityProperty, null);
+                NotchRoot.Opacity = 1.0;
                 NotchRoot.Visibility = Visibility.Visible;
 
                 switch (newState)
@@ -2239,7 +2693,7 @@ namespace DynamicIsland
                         break;
 
                     case IslandState.Compact:
-                        targetWidth = 540;
+                        targetWidth = 580;
                         targetHeight = 38;
                         targetView = ViewCompact;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#38BDF8");
@@ -2260,16 +2714,17 @@ namespace DynamicIsland
                         break;
 
                     case IslandState.Camera:
-                        targetWidth = 560;
-                        targetHeight = 110;
+                        targetWidth = 640;
+                        targetHeight = 136;
                         targetView = ViewCamera;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#10B981");
                         UpdateCameraUi(Process.GetProcessesByName("WindowsCamera").Length > 0);
+                        UpdateCaptureFolderUi();
                         break;
 
                     case IslandState.Notification:
-                        targetWidth = 660;
-                        targetHeight = 160;
+                        targetWidth = 680;
+                        targetHeight = 190;
                         targetView = ViewNotification;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#0284C7");
                         break;
@@ -2288,9 +2743,19 @@ namespace DynamicIsland
                         targetView = ViewLockScreen;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#F43F5E");
                         break;
+
+                    case IslandState.Update:
+                        targetWidth = 520;
+                        targetHeight = 135;
+                        targetView = ViewUpdate;
+                        CardGlow.Color = (Color)ColorConverter.ConvertFromString("#6366F1");
+                        break;
                 }
 
-                UpdateNotchGeometry(targetWidth, targetHeight, 0, 0);
+                if (!animate)
+                {
+                    UpdateNotchGeometry(targetWidth, targetHeight, 0, 0);
+                }
             }
 
             targetView.Visibility = Visibility.Visible;
@@ -2307,8 +2772,27 @@ namespace DynamicIsland
                     var duration = TimeSpan.FromMilliseconds(260);
                     var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
 
-                    var animWidth = new DoubleAnimation(IslandCard.ActualWidth > 0 ? IslandCard.ActualWidth : IslandCard.Width, targetWidth, duration) { EasingFunction = ease };
-                    var animHeight = new DoubleAnimation(IslandCard.ActualHeight > 0 ? IslandCard.ActualHeight : IslandCard.Height, targetHeight, duration) { EasingFunction = ease };
+                    double currentW = IslandCard.ActualWidth > 0 ? IslandCard.ActualWidth : IslandCard.Width;
+                    if (currentW < 350 || double.IsNaN(currentW))
+                    {
+                        currentW = targetWidth;
+                        IslandCard.Width = targetWidth;
+                    }
+
+                    double currentH = IslandCard.ActualHeight > 0 ? IslandCard.ActualHeight : IslandCard.Height;
+                    if (currentH < 25 || double.IsNaN(currentH))
+                    {
+                        currentH = targetHeight;
+                        IslandCard.Height = targetHeight;
+                    }
+
+                    var animWidth = new DoubleAnimation(currentW, targetWidth, duration) { EasingFunction = ease };
+                    var animHeight = new DoubleAnimation(currentH, targetHeight, duration) { EasingFunction = ease };
+
+                    animHeight.Completed += (s, e) =>
+                    {
+                        UpdateNotchGeometry(targetWidth, targetHeight, 0, 0);
+                    };
 
                     IslandCard.BeginAnimation(WidthProperty, animWidth);
                     IslandCard.BeginAnimation(HeightProperty, animHeight);
@@ -2353,12 +2837,21 @@ namespace DynamicIsland
             Application.Current.Shutdown();
         }
 
-        // Core Hub Click: returns to Compact and prevents re-triggering pull-down
+        // Core Hub Click: returns to Compact via reverse droplet flow straight from Core
         private void CoreHub_Click(object sender, MouseButtonEventArgs e)
         {
             e.Handled = true;
             _preventPullDownUntil = DateTime.UtcNow.AddMilliseconds(700);
-            SwitchState(IslandState.Compact);
+
+            // If an update is available AND not muted today: show update confirmation modal!
+            if (_availableUpdate != null && !IsUpdateMutedToday())
+            {
+                ShowUpdateModal();
+                return;
+            }
+
+            // Normal behavior: return to compact notch via reverse droplet flow
+            TriggerReverseDropletToTask(null, IslandState.Compact);
         }
 
         // Planet Click Handlers (Trigger Reverse Droplet Flow!)
@@ -2489,7 +2982,23 @@ namespace DynamicIsland
             public string? PrimaryId { get; set; }
         }
 
-        private int _sampleNotifyIndex = 0;
+        public class OutboxMessage
+        {
+            public long Id { get; set; }
+            public string App { get; set; } = "";
+            public string Recipient { get; set; } = "";
+            public string Message { get; set; } = "";
+            public string Time { get; set; } = "";
+        }
+
+        private readonly List<OutboxMessage> _pendingOutboxMessages = new();
+        private readonly object _outboxLock = new();
+
+        private void PillCompactNotification_Click(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            SwitchState(IslandState.Notification);
+        }
 
         private List<DynamicNotification> GetFilteredNotifications()
         {
@@ -2527,6 +3036,7 @@ namespace DynamicIsland
                 TxtAppTag.Text = _currentFilter == NotificationFilter.Zalo ? "Zalo" : _currentFilter == NotificationFilter.Facebook ? "Facebook" : "Hệ thống";
                 TxtNotifyTime.Text = "Không còn thông báo chờ";
                 TxtNotifCounter.Text = "0/0";
+                PillCompactNotification.Visibility = Visibility.Collapsed;
                 return;
             }
 
@@ -2542,6 +3052,7 @@ namespace DynamicIsland
             {
                 BadgeAppIcon.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(notif.AppColor));
                 BadgeAppGlow.Color = (Color)ColorConverter.ConvertFromString(notif.AppColor);
+                GlowCompactNotif.Color = (Color)ColorConverter.ConvertFromString(notif.AppColor);
             }
             catch
             {
@@ -2555,6 +3066,18 @@ namespace DynamicIsland
             TxtNotifyContent.Text = notif.Message;
             TxtNotifCounter.Text = $"{_currentFilteredIndex + 1}/{filtered.Count}";
             InputReply.Text = "";
+
+            // Update compact notification ticker on the notch bar
+            PillCompactNotification.Visibility = Visibility.Visible;
+            TxtCompactAppIcon.Text = notif.AppIcon;
+            TxtCompactSender.Text = notif.Sender;
+            TxtCompactMessage.Text = notif.Message;
+            try
+            {
+                GlowCompactNotif.Color = (Color)ColorConverter.ConvertFromString(notif.AppColor);
+            }
+            catch { }
+            ClockTimer_Tick(null, EventArgs.Empty);
         }
 
         private void ApplyFilterButtonStyle(Button btn, bool isActive)
@@ -2609,6 +3132,18 @@ namespace DynamicIsland
                         }
                     }
                 }
+                if (File.Exists(_deletedNotifHashesPath))
+                {
+                    var lines = File.ReadAllLines(_deletedNotifHashesPath);
+                    foreach (var line in lines)
+                    {
+                        string trimmed = line.Trim();
+                        if (!string.IsNullOrEmpty(trimmed))
+                        {
+                            _deletedNotificationHashes.Add(trimmed);
+                        }
+                    }
+                }
             }
             catch { }
         }
@@ -2620,6 +3155,7 @@ namespace DynamicIsland
                 string dir = Path.GetDirectoryName(_deletedNotifsPath)!;
                 if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 File.WriteAllLines(_deletedNotifsPath, _deletedNotificationIds.Select(id => id.ToString()));
+                File.WriteAllLines(_deletedNotifHashesPath, _deletedNotificationHashes);
             }
             catch { }
         }
@@ -2629,10 +3165,13 @@ namespace DynamicIsland
             if (_currentNotification != null)
             {
                 long id = _currentNotification.Id;
+                string hash = RealNotificationService.ComputeFingerprint(_currentNotification.AppName, _currentNotification.Sender, _currentNotification.Message);
+
                 _deletedNotificationIds.Add(id);
+                _deletedNotificationHashes.Add(hash);
                 SaveDeletedNotifications();
 
-                _realNotificationsList.RemoveAll(n => n.Id == id);
+                _realNotificationsList.RemoveAll(n => n.Id == id || RealNotificationService.ComputeFingerprint(n.AppName, n.Sender, n.Message) == hash);
                 var filtered = GetFilteredNotifications();
                 if (_currentFilteredIndex >= filtered.Count)
                 {
@@ -2667,7 +3206,8 @@ namespace DynamicIsland
         {
             Dispatcher.InvokeAsync(() =>
             {
-                if (_deletedNotificationIds.Contains(r.Id)) return; // Ignore if deleted!
+                string hash = RealNotificationService.ComputeFingerprint(r.AppName, r.Sender, r.Message);
+                if (_deletedNotificationIds.Contains(r.Id) || _deletedNotificationHashes.Contains(hash)) return; // Ignore if deleted!
 
                 var notif = new DynamicNotification
                 {
@@ -2682,7 +3222,7 @@ namespace DynamicIsland
                 };
 
                 // Avoid duplicate
-                if (!_realNotificationsList.Any(n => n.Id == notif.Id))
+                if (!_realNotificationsList.Any(n => n.Id == notif.Id || RealNotificationService.ComputeFingerprint(n.AppName, n.Sender, n.Message) == hash))
                 {
                     _realNotificationsList.Insert(0, notif);
                 }
@@ -2709,9 +3249,10 @@ namespace DynamicIsland
 
         public void ShowNotification(DynamicNotification notif)
         {
-            if (_deletedNotificationIds.Contains(notif.Id)) return;
+            string hash = RealNotificationService.ComputeFingerprint(notif.AppName, notif.Sender, notif.Message);
+            if (_deletedNotificationIds.Contains(notif.Id) || _deletedNotificationHashes.Contains(hash)) return;
 
-            if (!_realNotificationsList.Any(n => n.Id == notif.Id))
+            if (!_realNotificationsList.Any(n => n.Id == notif.Id || RealNotificationService.ComputeFingerprint(n.AppName, n.Sender, n.Message) == hash))
             {
                 _realNotificationsList.Insert(0, notif);
             }
@@ -2720,47 +3261,250 @@ namespace DynamicIsland
             SwitchState(IslandState.Notification);
         }
 
-        private void BtnSimulateMsg_Click(object sender, RoutedEventArgs e)
+        #region Local HTTP Webhook Server for Facebook & Zalo Messages
+        private HttpListener? _httpServer;
+        private CancellationTokenSource? _serverCts;
+
+        private void StartLocalMessageApiServer()
         {
-            _sampleNotifyIndex++;
-            DynamicNotification sampleNotif;
-
-            if (_sampleNotifyIndex % 2 == 1)
+            try
             {
-                // Sample Facebook notification
-                sampleNotif = new DynamicNotification
-                {
-                    Id = DateTime.Now.Ticks,
-                    AppName = "Facebook",
-                    AppIcon = "📘",
-                    AppColor = "#1877F2",
-                    Sender = "Nguyễn Hoàng",
-                    Message = "Đã nhắc đến bạn trong một bình luận: 'Alo bạn xem bài viết mới này hay quá nè!'",
-                    Time = DateTime.Now.ToString("HH:mm"),
-                    PrimaryId = "facebook"
-                };
-            }
-            else
-            {
-                // Sample Zalo notification
-                sampleNotif = new DynamicNotification
-                {
-                    Id = DateTime.Now.Ticks,
-                    AppName = "Zalo",
-                    AppIcon = "💬",
-                    AppColor = "#0068FF",
-                    Sender = "Trần Hải Đăng",
-                    Message = "Alo bạn ơi! Tài liệu thiết kế dự án đã hoàn thiện rồi nhé, bạn xem qua rồi phản hồi mình nha!",
-                    Time = DateTime.Now.ToString("HH:mm"),
-                    PrimaryId = "com.vng.zalo"
-                };
-            }
+                _serverCts = new CancellationTokenSource();
+                _httpServer = new HttpListener();
+                _httpServer.Prefixes.Add("http://127.0.0.1:5005/api/");
+                _httpServer.Start();
 
-            _realNotificationsList.Insert(0, sampleNotif);
-            _currentFilteredIndex = 0;
-            UpdateNotificationUI();
-            SwitchState(IslandState.Notification);
+                Task.Run(() => ListenForApiRequestsAsync(_serverCts.Token));
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Local API Server start error: {ex.Message}");
+            }
         }
+
+        private async Task ListenForApiRequestsAsync(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested && _httpServer != null && _httpServer.IsListening)
+            {
+                try
+                {
+                    var ctx = await _httpServer.GetContextAsync();
+                    _ = ProcessApiRequestAsync(ctx);
+                }
+                catch when (token.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch { }
+            }
+        }
+
+        private async Task ProcessApiRequestAsync(HttpListenerContext ctx)
+        {
+            var req = ctx.Request;
+            var res = ctx.Response;
+
+            // Enable Full Cross-Origin Resource Sharing (CORS) & Chrome Private Network Access (PNA)
+            res.Headers.Add("Access-Control-Allow-Origin", "*");
+            res.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            res.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Private-Network, *");
+            res.Headers.Add("Access-Control-Allow-Private-Network", "true");
+            res.Headers.Add("Access-Control-Max-Age", "86400");
+
+            if (req.HttpMethod == "OPTIONS")
+            {
+                res.StatusCode = 204;
+                res.Close();
+                return;
+            }
+
+            try
+            {
+                string path = req.Url?.AbsolutePath.ToLowerInvariant() ?? "";
+
+                // Interactive Test Endpoint: visiting in browser triggers test alert and displays web dashboard
+                if (path.EndsWith("/test") || path.Contains("/test/"))
+                {
+                    string testApp = path.Contains("zalo") ? "Zalo" : (path.Contains("facebook") ? "Facebook" : "Facebook & Zalo");
+                    string testSender = path.Contains("zalo") ? "Zalo Test" : "Facebook Test";
+                    string testMsg = path.Contains("zalo")
+                        ? "💬 Tin nhắn Zalo test kết nối thành công vào Dynamic Island!"
+                        : "📘 Tin nhắn Facebook test kết nối thành công vào Dynamic Island!";
+
+                    bool isZalo = testApp.Contains("Zalo");
+                    var testNotif = new DynamicNotification
+                    {
+                        Id = DateTime.Now.Ticks,
+                        AppName = isZalo ? "Zalo" : "Facebook",
+                        AppIcon = isZalo ? "💬" : "📘",
+                        AppColor = isZalo ? "#0068FF" : "#1877F2",
+                        Sender = testSender,
+                        Message = testMsg,
+                        Time = "Vừa xong",
+                        PrimaryId = isZalo ? "com.vng.zalo" : "facebook"
+                    };
+
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        ShowNotification(testNotif);
+                    });
+
+                    string html = @"<!DOCTYPE html>
+<html lang=""vi"">
+<head>
+  <meta charset=""utf-8""/>
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1""/>
+  <title>Dynamic Island Message Bridge</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0f19; color: #f1f5f9; padding: 40px 20px; text-align: center; }
+    .card { max-width: 600px; margin: 0 auto; background: #1e293b; border-radius: 20px; padding: 36px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); border: 1px solid #334155; }
+    h1 { color: #38bdf8; margin: 12px 0; font-size: 24px; }
+    .badge { display: inline-block; padding: 6px 16px; background: #064e3b; color: #34d399; border-radius: 999px; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; }
+    p { color: #94a3b8; font-size: 14px; line-height: 1.6; }
+    .btn-group { margin: 28px 0; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+    .btn { padding: 12px 24px; border-radius: 12px; font-weight: 600; text-decoration: none; color: white; display: inline-block; font-size: 14px; transition: transform 0.15s, opacity 0.15s; }
+    .btn:hover { transform: translateY(-2px); opacity: 0.95; }
+    .btn-fb { background: #1877f2; }
+    .btn-zalo { background: #0068ff; }
+    .status-box { background: #0f172a; border-radius: 12px; padding: 16px; margin-top: 24px; text-align: left; font-family: monospace; font-size: 13px; color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <div class=""card"">
+    <div class=""badge"">🟢 HTTP API Port 5005 Online</div>
+    <h1>🏝️ Dynamic Island Message Bridge</h1>
+    <p>Hệ thống nhận thông báo Facebook &amp; Zalo đang hoạt động chuẩn xác trên Windows! Click nút bên dưới để thử nghiệm hiển thị lên Dynamic Island ngay lập tức.</p>
+    <div class=""btn-group"">
+      <a href=""/api/test/facebook"" class=""btn btn-fb"">📘 Test Thông Báo Facebook</a>
+      <a href=""/api/test/zalo"" class=""btn btn-zalo"">💬 Test Thông Báo Zalo</a>
+    </div>
+    <div class=""status-box"">
+      &bull; Endpoint: http://127.0.0.1:5005/api/message<br/>
+      &bull; PNA (Private Network Access): Enabled<br/>
+      &bull; Trạng thái: Sẵn sàng nhận tin nhắn từ Facebook và Zalo
+    </div>
+  </div>
+</body>
+</html>";
+                    byte[] htmlBytes = Encoding.UTF8.GetBytes(html);
+                    res.ContentType = "text/html; charset=utf-8";
+                    res.StatusCode = 200;
+                    await res.OutputStream.WriteAsync(htmlBytes);
+                    return;
+                }
+                else if (path.EndsWith("/message") || path.EndsWith("/notification"))
+                {
+                    string app = "Facebook";
+                    string sender = "";
+                    string message = "";
+                    string time = "Vừa xong";
+
+                    if (req.HttpMethod == "POST")
+                    {
+                        using var reader = new StreamReader(req.InputStream, req.ContentEncoding);
+                        string body = await reader.ReadToEndAsync();
+                        if (!string.IsNullOrWhiteSpace(body))
+                        {
+                            using var doc = System.Text.Json.JsonDocument.Parse(body);
+                            var root = doc.RootElement;
+                            if (root.TryGetProperty("app", out var appProp)) app = appProp.GetString() ?? "Facebook";
+                            if (root.TryGetProperty("sender", out var sProp)) sender = sProp.GetString() ?? "Người dùng";
+                            if (root.TryGetProperty("message", out var mProp)) message = mProp.GetString() ?? "";
+                            if (root.TryGetProperty("time", out var tProp)) time = tProp.GetString() ?? "Vừa xong";
+                        }
+                    }
+                    else if (req.HttpMethod == "GET")
+                    {
+                        var qs = req.QueryString;
+                        if (!string.IsNullOrEmpty(qs["app"])) app = qs["app"]!;
+                        if (!string.IsNullOrEmpty(qs["sender"])) sender = qs["sender"]!;
+                        if (!string.IsNullOrEmpty(qs["message"])) message = qs["message"]!;
+                        if (!string.IsNullOrEmpty(qs["time"])) time = qs["time"]!;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(sender) || !string.IsNullOrWhiteSpace(message))
+                    {
+                        bool isZalo = app.Contains("zalo", StringComparison.OrdinalIgnoreCase);
+                        sender = string.IsNullOrWhiteSpace(sender) ? (isZalo ? "Zalo" : "Facebook") : sender.Trim();
+                        message = (message ?? "").Trim();
+
+                        var notif = new DynamicNotification
+                        {
+                            Id = DateTime.Now.Ticks,
+                            AppName = isZalo ? "Zalo" : "Facebook",
+                            AppIcon = isZalo ? "💬" : "📘",
+                            AppColor = isZalo ? "#0068FF" : "#1877F2",
+                            Sender = sender,
+                            Message = message,
+                            Time = time,
+                            PrimaryId = isZalo ? "com.vng.zalo" : "facebook"
+                        };
+
+                        await Dispatcher.InvokeAsync(() =>
+                        {
+                            ShowNotification(notif);
+                        });
+                    }
+
+                    // If request came from an Image ping (e.g. new Image().src = ...), return 1x1 GIF
+                    if (req.AcceptTypes != null && req.AcceptTypes.Any(t => t.Contains("image", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        byte[] gif1x1 = new byte[] {
+                            0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00,
+                            0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00,
+                            0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02,
+                            0x44, 0x01, 0x00, 0x3b
+                        };
+                        res.ContentType = "image/gif";
+                        res.StatusCode = 200;
+                        await res.OutputStream.WriteAsync(gif1x1);
+                    }
+                    else
+                    {
+                        byte[] respBytes = Encoding.UTF8.GetBytes("{\"success\": true, \"received\": true}");
+                        res.ContentType = "application/json";
+                        res.StatusCode = 200;
+                        await res.OutputStream.WriteAsync(respBytes);
+                    }
+                }
+                else if (path.EndsWith("/outbox"))
+                {
+                    string json;
+                    lock (_outboxLock)
+                    {
+                        json = System.Text.Json.JsonSerializer.Serialize(_pendingOutboxMessages);
+                        _pendingOutboxMessages.Clear();
+                    }
+                    byte[] bytes = Encoding.UTF8.GetBytes(json);
+                    res.ContentType = "application/json";
+                    res.StatusCode = 200;
+                    await res.OutputStream.WriteAsync(bytes);
+                }
+                else if (path.EndsWith("/status"))
+                {
+                    string json = $"{{\"status\": \"running\", \"pna\": true, \"count\": {_realNotificationsList.Count}, \"state\": \"{_currentState}\"}}";
+                    byte[] bytes = Encoding.UTF8.GetBytes(json);
+                    res.ContentType = "application/json";
+                    res.StatusCode = 200;
+                    await res.OutputStream.WriteAsync(bytes);
+                }
+                else
+                {
+                    res.StatusCode = 404;
+                }
+            }
+            catch (Exception ex)
+            {
+                res.StatusCode = 500;
+                byte[] errBytes = Encoding.UTF8.GetBytes($"{{\"error\": \"{ex.Message}\"}}");
+                await res.OutputStream.WriteAsync(errBytes);
+            }
+            finally
+            {
+                try { res.Close(); } catch { }
+            }
+        }
+        #endregion
 
         private void InputReply_TextChanged(object sender, TextChangedEventArgs e)
         {
@@ -2771,59 +3515,64 @@ namespace DynamicIsland
         {
             if (e.Key == Key.Enter)
             {
+                e.Handled = true;
                 BtnSendReply_Click(sender, e);
             }
         }
 
-        private async void BtnSendReply_Click(object sender, RoutedEventArgs e)
+        private void BtnSendReply_Click(object sender, RoutedEventArgs e)
         {
             string reply = InputReply.Text.Trim();
             if (string.IsNullOrWhiteSpace(reply)) return;
 
-            string senderName = TxtNotifySender.Text;
+            string senderName = _currentNotification?.Sender ?? TxtNotifySender.Text;
             string appName = _currentNotification?.AppName ?? TxtAppTag.Text;
 
-            // 1. Copy to Windows Clipboard
+            // 1. Silent Background Send (Zero browser tab opening or window switching!)
+            bool sentSilently = RealNotificationService.TrySendSilentReply(appName, senderName, reply);
+
+            // 2. Safely copy to clipboard as seamless backup with retry
             try
             {
-                Clipboard.SetText(reply);
+                Clipboard.SetDataObject(reply, true);
             }
             catch { }
 
-            // 2. Bring application or browser window to front!
-            IntPtr targetHwnd = RealNotificationService.FocusApp(_currentNotification?.PrimaryId, appName);
-
-            TxtNotifyContent.Text = $"⚡ Đang gửi trả lời tới {senderName} trên {appName}...";
-            ShowModernToast($"Đang gửi phản hồi tới {senderName}...", "💬", "#38BDF8");
-
-            // 3. Automate Ctrl+V paste and Enter to send directly!
-            await Task.Delay(260);
-            keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
-            keybd_event(VK_V, 0, 0, UIntPtr.Zero);
-            keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
-            await Task.Delay(120);
-            keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);
-            keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
-            // 4. Visual feedback
-            TxtNotifySender.Text = $"✓ Đã gửi cho {senderName}!";
-            TxtNotifyContent.Text = $"✓ Bạn: \"{reply}\" (Đã gửi qua {appName})";
-            InputReply.Text = "";
-            ShowModernToast($"Đã gửi tin nhắn tới {senderName} trên {appName}!", "🚀", "#10B981");
-
-            // Auto-collapse back to Compact after 2.5 seconds
-            var returnTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2500) };
-            returnTimer.Tick += (s, args) =>
+            // 3. Enqueue to silent background outbox queue
+            lock (_outboxLock)
             {
-                returnTimer.Stop();
-                if (_currentState == IslandState.Notification)
+                _pendingOutboxMessages.Add(new OutboxMessage
                 {
-                    SwitchState(IslandState.Compact);
-                }
-            };
-            returnTimer.Start();
+                    Id = DateTime.Now.Ticks,
+                    App = appName,
+                    Recipient = senderName,
+                    Message = reply,
+                    Time = DateTime.Now.ToString("HH:mm:ss")
+                });
+            }
+
+            // 4. Mark current notification as permanently handled and dismissed
+            if (_currentNotification != null)
+            {
+                _deletedNotificationIds.Add(_currentNotification.Id);
+                string hash = RealNotificationService.ComputeFingerprint(_currentNotification.AppName, _currentNotification.Sender, _currentNotification.Message);
+                _deletedNotificationHashes.Add(hash);
+                SaveDeletedNotifications();
+                _realNotificationsList.RemoveAll(n => n.Id == _currentNotification.Id);
+                _currentNotification = null;
+            }
+
+            // 5. Clear reply input
+            InputReply.Text = "";
+
+            // 6. Modern feedback toast (Zero outgoing message on Core Island!)
+            ShowModernToast($"✓ Đã gửi phản hồi tới {senderName}!", "✓", "#10B981");
+
+            // CRITICAL: NEVER display outgoing messages from user ("Bạn") on the compact island at Core!
+            PillCompactNotification.Visibility = Visibility.Collapsed;
+
+            // 7. Smoothly collapse back to Compact state
+            SwitchState(IslandState.Compact);
         }
 
         private void ChipReply_Click(object sender, RoutedEventArgs e)
@@ -2851,6 +3600,190 @@ namespace DynamicIsland
             ShowNotification(shareNotif);
             InputReply.Text = $"Gửi bạn tệp {fileName} nhé!";
             InputReply.Focus();
+        }
+        #endregion
+
+        #region Auto-Update System
+        private UpdateInfo? _availableUpdate;
+
+        private static string GetMuteSettingsFilePath()
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DynamicIsland");
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, "update_muted.txt");
+        }
+
+        private bool IsUpdateMutedToday()
+        {
+            try
+            {
+                string file = GetMuteSettingsFilePath();
+                if (File.Exists(file))
+                {
+                    string dateStr = File.ReadAllText(file).Trim();
+                    if (dateStr == DateTime.Today.ToString("yyyy-MM-dd"))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private void SetUpdateMutedForToday()
+        {
+            try
+            {
+                string file = GetMuteSettingsFilePath();
+                File.WriteAllText(file, DateTime.Today.ToString("yyyy-MM-dd"));
+            }
+            catch { }
+        }
+
+        private async Task CheckForUpdateInBackgroundAsync()
+        {
+            await Task.Delay(3000);
+            try
+            {
+                var update = await UpdateService.CheckForUpdatesAsync();
+                if (update != null)
+                {
+                    _availableUpdate = update;
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        UpdateCorePlanetAppearance();
+                    });
+                }
+                else
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        ResetCorePlanetAppearance();
+                    });
+                }
+            }
+            catch { }
+        }
+
+        private void UpdateCorePlanetAppearance()
+        {
+            // If already on latest version OR user checked "Không hỏi lại trong hôm nay":
+            // Core planet remains 100% original, exactly as default!
+            if (_availableUpdate == null || IsUpdateMutedToday())
+            {
+                ResetCorePlanetAppearance();
+                return;
+            }
+
+            // Highlight Core Planet with glowing Update rocket badge!
+            BadgeCoreUpdate.Visibility = Visibility.Visible;
+            TxtCoreUpdateVersion.Text = _availableUpdate.VersionTag;
+            BlackHoleGlow.Color = (Color)ColorConverter.ConvertFromString("#818CF8");
+            BlackHoleCore.ToolTip = $"🚀 Có bản cập nhật mới {_availableUpdate.VersionTag}! Nhấp vào hố đen trung tâm để nâng cấp.";
+        }
+
+        private void ResetCorePlanetAppearance()
+        {
+            BadgeCoreUpdate.Visibility = Visibility.Collapsed;
+            BlackHoleGlow.Color = (Color)ColorConverter.ConvertFromString("#EA580C");
+            BlackHoleCore.ToolTip = "Hố đen trung tâm - Nhấp để thu gọn về thanh đảo";
+        }
+
+        private void ShowUpdateModal()
+        {
+            if (_availableUpdate == null) return;
+            TxtModalUpdateVersion.Text = $"Dynamic Island {_availableUpdate.VersionTag}";
+            TxtModalUpdateChangelog.Text = string.IsNullOrWhiteSpace(_availableUpdate.Changelog)
+                ? "Bản cập nhật mới với nhiều cải tiến hiệu năng và sửa lỗi!"
+                : _availableUpdate.Changelog;
+            ChkDoNotAskToday.IsChecked = false;
+            GridModalProgress.Visibility = Visibility.Collapsed;
+            BtnModalConfirm.IsEnabled = true;
+            BtnModalDismiss.IsEnabled = true;
+            ModalUpdateHost.Visibility = Visibility.Visible;
+        }
+
+        private void BtnCancelModalUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            ModalUpdateHost.Visibility = Visibility.Collapsed;
+
+            // If user checked "Không hỏi lại trong hôm nay":
+            if (ChkDoNotAskToday.IsChecked == true)
+            {
+                SetUpdateMutedForToday();
+                // Immediately revert Core Planet to its original clean state with no badge or indicator!
+                ResetCorePlanetAppearance();
+                ShowModernToast("Đã tắt thông báo cập nhật trong hôm nay.", "ℹ️", "#94A3B8");
+            }
+        }
+
+        private async void BtnConfirmModalUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            if (_availableUpdate == null) return;
+            BtnModalConfirm.IsEnabled = false;
+            BtnModalDismiss.IsEnabled = false;
+            GridModalProgress.Visibility = Visibility.Visible;
+            PbModalProgress.Value = 0;
+            TxtModalPercent.Text = "0%";
+            TxtModalUpdateChangelog.Text = "Đang tải bản cập nhật mới...";
+
+            var progress = new Progress<int>(percent =>
+            {
+                PbModalProgress.Value = percent;
+                TxtModalPercent.Text = $"{percent}%";
+                TxtModalUpdateChangelog.Text = $"Đang tải bản cập nhật: {percent}%...";
+            });
+
+            try
+            {
+                await UpdateService.DownloadAndInstallUpdateAsync(_availableUpdate, progress);
+            }
+            catch (Exception ex)
+            {
+                BtnModalConfirm.IsEnabled = true;
+                BtnModalDismiss.IsEnabled = true;
+                GridModalProgress.Visibility = Visibility.Collapsed;
+                TxtModalUpdateChangelog.Text = $"Lỗi cập nhật: {ex.Message}";
+                ShowModernToast("Tải bản cập nhật thất bại!", "❌", "#EF4444");
+            }
+        }
+
+        private void PillMediaMini_Click(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            SwitchState(IslandState.Music);
+        }
+
+        private async void BtnApplyUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            if (_availableUpdate == null) return;
+            BtnApplyUpdate.IsEnabled = false;
+            BtnCancelUpdate.IsEnabled = false;
+            GridUpdateProgress.Visibility = Visibility.Visible;
+            PbUpdateProgress.Value = 0;
+            TxtUpdatePercent.Text = "0%";
+            TxtUpdateChangelog.Text = "Đang tải gói cập nhật...";
+
+            var progress = new Progress<int>(percent =>
+            {
+                PbUpdateProgress.Value = percent;
+                TxtUpdatePercent.Text = $"{percent}%";
+                TxtUpdateChangelog.Text = $"Đang tải bản cập nhật: {percent}%...";
+            });
+
+            try
+            {
+                await UpdateService.DownloadAndInstallUpdateAsync(_availableUpdate, progress);
+            }
+            catch (Exception ex)
+            {
+                BtnApplyUpdate.IsEnabled = true;
+                BtnCancelUpdate.IsEnabled = true;
+                GridUpdateProgress.Visibility = Visibility.Collapsed;
+                TxtUpdateChangelog.Text = $"Lỗi cập nhật: {ex.Message}";
+                ShowModernToast("Tải bản cập nhật thất bại!", "❌", "#EF4444");
+            }
         }
         #endregion
         #endregion

@@ -1,0 +1,6 @@
+{
+  "version": "1.5.0",
+  "title": "Bản cập nhật Dynamic Island v1.5.0",
+  "changelog": "- Tích hợp biểu tượng Logo Cyber-Cosmic hoàn toàn mới chuẩn Windows Application Icon (.ico & .png)\n- Hoàn thiện vật lý giọt nước rơi mượt mà: đồng bộ xuất hiện Hố Đen và bung nở hành tinh\n- Sửa lỗi giọt nước chảy ngược: Đảo thu gọn về Compact mượt mà trước khi giọt nước nhỏ xuống\n- Nâng cấp nhận diện thông báo thực từ Facebook và Zalo trên Windows\n- Trả lời tin nhắn ngầm (Silent Reply) không gây chuyển tab hay phóng to/thu nhỏ trình duyệt\n- Loại bỏ triệt để hiển thị tin nhắn đi của người dùng trên đảo Compact\n- Tích hợp hệ thống tự động kiểm tra và nâng cấp phiên bản mới",
+  "downloadUrl": "https://github.com/Jandz01/Dynamic-Island/releases/latest/download/DynamicIsland.exe"
+}

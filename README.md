@@ -7,13 +7,14 @@ Featuring authentic liquid morphing, orbital multitasking satellites, realtime s
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011%20(x64)-0078D4?style=for-the-badge&logo=windows)](https://github.com/Jandz01/Dynamic-Island)
 [![.NET](https://img.shields.io/badge/.NET-9.0%20WPF-512BD4?style=for-the-badge&logo=dotnet)](https://dotnet.microsoft.com/)
+[![GitHub Stars](https://img.shields.io/github/stars/Jandz01/Dynamic-Island?style=for-the-badge&logo=github&color=FFB800)](https://github.com/Jandz01/Dynamic-Island/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/Jandz01/Dynamic-Island?style=for-the-badge&logo=github&color=38BDF8)](https://github.com/Jandz01/Dynamic-Island/network/members)
+[![Total Downloads](https://img.shields.io/github/downloads/Jandz01/Dynamic-Island/total?style=for-the-badge&logo=github&color=10B981)](https://github.com/Jandz01/Dynamic-Island/releases)
 [![License](https://img.shields.io/badge/License-MIT-success?style=for-the-badge)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/Jandz01/Dynamic-Island?style=for-the-badge&color=blue)](https://github.com/Jandz01/Dynamic-Island/releases)
-[![Zero Runtime](https://img.shields.io/badge/Install-Zero%20Dependencies%20(Portable)-10B981?style=for-the-badge)](https://github.com/Jandz01/Dynamic-Island/releases)
 
 <br/>
 
-[**Download Latest Release (v1.2.0)**](https://github.com/Jandz01/Dynamic-Island/releases/latest) • [**Key Features**](#-key-features) • [**Gestures & Navigation**](#-controls--gestures) • [**Architecture**](#-architecture--tech-stack)
+[**Download Latest Release (v1.5.0)**](https://github.com/Jandz01/Dynamic-Island/releases/latest) • [**Key Features**](#-key-features) • [**Gestures & Navigation**](#-controls--gestures) • [**Growth Trends**](#-stargazers--community-growth) • [**Architecture**](#-architecture--tech-stack)
 
 </div>
 
@@ -127,6 +128,24 @@ dotnet publish DynamicIsland.csproj -c Release -r win-x64 --self-contained true 
 
 ---
 
+## 📊 Stargazers & Community Growth
+
+Biểu đồ đường trực quan theo dõi số lượt **Stars**, lượt tải và hoạt động phát triển của **Dynamic Island for Windows**, tự động cập nhật mỗi ngày:
+
+<div align="center">
+
+### 🌟 Star History Chart (Cập nhật hàng ngày)
+[![Star History Chart](https://api.star-history.com/svg?repos=Jandz01/Dynamic-Island&type=Date&theme=dark)](https://star-history.com/#Jandz01/Dynamic-Island&Date)
+
+<br/>
+
+### 📈 Git Activity & Contribution Graph
+[![Activity Graph](https://github-readme-activity-graph.vercel.app/graph?username=Jandz01&repo=Dynamic-Island&theme=react-dark&hide_border=true&area=true)](https://github.com/Jandz01/Dynamic-Island)
+
+</div>
+
+---
+
 ## 🏗️ Architecture & Tech Stack
 
 ```
@@ -134,7 +153,10 @@ DynamicIsland/
 ├── MainWindow.xaml          # Fluent dark-glass UI, SVG Bézier notch geometries, HUD toasts
 ├── MainWindow.xaml.cs       # Liquid physics, Win32 interop, drag kinematics, UI state machine
 ├── RealNotificationService.cs # SQLite watcher on Windows wpndatabase.db (Zalo, Facebook, etc.)
-├── App.xaml / App.xaml.cs   # Application lifecycle, single-instance mutex, crash handler
+├── UpdateService.cs         # GitHub Releases & version.json auto-updater
+├── App.xaml / App.xaml.cs   # Application lifecycle, crash handler
+├── app.ico / logo.png       # Cyber-Cosmic Dynamic Island application icon
+├── scripts/                 # Direct NotebookLM RPC bridge
 └── .github/workflows/       # GitHub Actions CI/CD automated release pipeline
 ```
 
