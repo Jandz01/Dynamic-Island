@@ -98,6 +98,7 @@ namespace DynamicIsland
         private const int SW_RESTORE = 9;
         private const byte VK_CONTROL = 0x11;
         private const byte VK_V = 0x56;
+        private const byte VK_RETURN = 0x0D;
         private const uint KEYEVENTF_KEYUP = 0x0002;
 
         #endregion
@@ -145,9 +146,20 @@ namespace DynamicIsland
         private int _pomoTotal = 25 * 60;
         private bool _pomoIsRunning = false;
 
-        // Dropzone
+        // Dropzone & Sources
+        private enum SourceType { None, File, Link }
+        private SourceType _currentSourceType = SourceType.None;
         private string? _currentFilePath = null;
+        private string? _currentSourceUrl = null;
         private string _notebookName = "";
+        private bool _isNotebookVerified = false;
+
+        // Persistent Deleted Notifications
+        private readonly string _deletedNotifsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DynamicIsland", "deleted_notifs.txt"
+        );
+        private readonly HashSet<long> _deletedNotificationIds = new();
 
         public MainWindow()
         {
@@ -196,11 +208,15 @@ namespace DynamicIsland
             // Initialize Windows Media
             await InitMediaManagerAsync();
 
+            // Load permanently deleted notification IDs
+            LoadDeletedNotifications();
+
             // Initialize Real Windows Notification Service
+            _realNotificationService.IsDeletedPredicate = id => _deletedNotificationIds.Contains(id);
             _realNotificationService.NotificationReceived += OnRealNotificationReceived;
             _realNotificationService.Start();
 
-            // Pre-load recent real notifications from user's system
+            // Pre-load recent real notifications from user's system (excluding any deleted ones)
             var recent = _realNotificationService.GetRecentNotifications(10);
             if (recent.Count > 0)
             {
@@ -226,21 +242,6 @@ namespace DynamicIsland
 
             // Update Notification UI with loaded notifications
             UpdateNotificationUI();
-
-            // Setup demo incoming notification after 8s using REAL recent notification if available
-            var demoNotifyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
-            demoNotifyTimer.Tick += (s, args) =>
-            {
-                demoNotifyTimer.Stop();
-                if (_currentState == IslandState.Compact || _currentState == IslandState.Mini)
-                {
-                    if (_realNotificationsList.Count > 0)
-                    {
-                        ShowNotification(_realNotificationsList[0]);
-                    }
-                }
-            };
-            demoNotifyTimer.Start();
         }
 
         // Horizontal offset from screen center
@@ -1137,7 +1138,7 @@ namespace DynamicIsland
             "DynamicIsland", "notebooklm_url.txt"
         );
 
-        private bool IsValidNotebookLmUrl(string? url)
+        private bool IsAuthenticNotebookLink(string? url)
         {
             if (string.IsNullOrWhiteSpace(url)) return false;
             url = url.Trim();
@@ -1148,14 +1149,29 @@ namespace DynamicIsland
             if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult)) return false;
 
             string host = uriResult.Host.ToLowerInvariant();
-            return host.Contains("notebooklm") || (host.Contains("google.com") && uriResult.AbsolutePath.Contains("notebook"));
+            if (!host.Contains("notebooklm")) return false;
+
+            // An authentic notebook link MUST contain /notebook/ followed by a notebook ID
+            string path = uriResult.AbsolutePath.ToLowerInvariant();
+            if (!path.Contains("/notebook/")) return false;
+
+            string[] segments = uriResult.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            for (int i = 0; i < segments.Length; i++)
+            {
+                if (segments[i].Equals("notebook", StringComparison.OrdinalIgnoreCase) && i + 1 < segments.Length)
+                {
+                    return !string.IsNullOrWhiteSpace(segments[i + 1]);
+                }
+            }
+            return false;
         }
 
-        private void UpdateNotebookLmStatus(bool isValid, string url, string notebookName = "", bool isWindowLive = false)
+        private void UpdateNotebookLmStatus(bool isAuthentic, string url, string notebookName = "", bool isWindowLive = false)
         {
+            _isNotebookVerified = isAuthentic;
             Dispatcher.Invoke(() =>
             {
-                if (isValid || isWindowLive)
+                if (isAuthentic)
                 {
                     BorderNotebookStatus.Background = (Brush)new BrushConverter().ConvertFromString("#064E3B")!;
                     BorderNotebookStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
@@ -1166,21 +1182,21 @@ namespace DynamicIsland
                             ? $"🟢 Đang mở: {notebookName}" 
                             : $"🟢 Sổ tay: {notebookName}";
                     }
-                    else if (url.Contains("/notebook/"))
-                    {
-                        TxtNotebookStatus.Text = "🟢 Đã kết nối Sổ tay NotebookLM";
-                    }
                     else
                     {
-                        TxtNotebookStatus.Text = "🟢 Đã kết nối NotebookLM";
+                        TxtNotebookStatus.Text = "🟢 Đã xác thực Sổ tay thật";
                     }
+                    BtnSendToNotebookLM.IsEnabled = true;
+                    BtnSendToNotebookLM.Opacity = 1.0;
                 }
                 else
                 {
-                    BorderNotebookStatus.Background = (Brush)new BrushConverter().ConvertFromString("#291F03")!;
-                    BorderNotebookStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#EAB308")!;
-                    TxtNotebookStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#FDE047")!;
-                    TxtNotebookStatus.Text = "🟡 Chưa liên kết (Nhập URL hoặc mở NotebookLM)";
+                    BorderNotebookStatus.Background = (Brush)new BrushConverter().ConvertFromString("#291219")!;
+                    BorderNotebookStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#E11D48")!;
+                    TxtNotebookStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#FDA4AF")!;
+                    TxtNotebookStatus.Text = "🔴 Chưa xác thực (Cần link .../notebook/ID)";
+                    BtnSendToNotebookLM.IsEnabled = false;
+                    BtnSendToNotebookLM.Opacity = 0.55;
                 }
             });
         }
@@ -1303,7 +1319,6 @@ namespace DynamicIsland
 
         private async Task DetectAndRefreshNotebookAsync(bool showToast = false)
         {
-            // Spin animation for Refresh button icon
             try
             {
                 var spinAnim = new DoubleAnimation(0, 360, TimeSpan.FromMilliseconds(450))
@@ -1333,9 +1348,9 @@ namespace DynamicIsland
             }
 
             bool hasWindow = hWnd != IntPtr.Zero;
-            bool validUrl = IsValidNotebookLmUrl(url);
+            bool authentic = IsAuthenticNotebookLink(url);
 
-            UpdateNotebookLmStatus(validUrl || hasWindow, url, _notebookName, hasWindow);
+            UpdateNotebookLmStatus(authentic, url, _notebookName, hasWindow);
             SaveNotebookLmConfig(url, _notebookName);
 
             if (showToast)
@@ -1344,17 +1359,13 @@ namespace DynamicIsland
                 {
                     ShowModernToast($"Đã nhận diện Sổ tay: '{_notebookName}' (Tab đang mở)", "🎯", "#10B981");
                 }
-                else if (hasWindow)
+                else if (authentic)
                 {
-                    ShowModernToast("Đã kết nối với cửa sổ NotebookLM trên trình duyệt!", "🟢", "#10B981");
-                }
-                else if (validUrl)
-                {
-                    ShowModernToast("Đã kết nối URL NotebookLM (Sẵn sàng nhận tệp)", "🟢", "#10B981");
+                    ShowModernToast("Đã xác thực Sổ tay NotebookLM thật!", "🟢", "#10B981");
                 }
                 else
                 {
-                    ShowModernToast("Chưa thấy tab NotebookLM. Hãy mở Sổ tay trên trình duyệt!", "ℹ️", "#38BDF8");
+                    ShowModernToast("Chưa xác thực Sổ tay! Hãy dán link Sổ tay thật (.../notebook/ID)", "ℹ️", "#F59E0B");
                 }
             }
             await Task.CompletedTask;
@@ -1390,17 +1401,17 @@ namespace DynamicIsland
                         {
                             TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
                         }
-                        bool valid = IsValidNotebookLmUrl(savedUrl);
-                        UpdateNotebookLmStatus(valid, savedUrl, _notebookName, false);
+                        bool authentic = IsAuthenticNotebookLink(savedUrl);
+                        UpdateNotebookLmStatus(authentic, savedUrl, _notebookName, false);
                         return;
                     }
                 }
             }
             catch { }
 
-            InputNotebookUrl.Text = "https://notebooklm.google.com/";
-            TxtNotebookUrlPlaceholder.Visibility = Visibility.Collapsed;
-            UpdateNotebookLmStatus(true, InputNotebookUrl.Text, "", false);
+            InputNotebookUrl.Text = "";
+            TxtNotebookUrlPlaceholder.Visibility = Visibility.Visible;
+            UpdateNotebookLmStatus(false, "", "", false);
         }
 
         private void SaveNotebookLmConfig(string url, string name)
@@ -1417,7 +1428,7 @@ namespace DynamicIsland
         private void BtnSaveNotebookUrl_Click(object sender, RoutedEventArgs e)
         {
             string text = InputNotebookUrl.Text.Trim();
-            if (IsValidNotebookLmUrl(text))
+            if (IsAuthenticNotebookLink(text))
             {
                 string detected = ExtractNotebookName("", text);
                 if (!string.IsNullOrWhiteSpace(detected))
@@ -1427,12 +1438,12 @@ namespace DynamicIsland
                 }
                 SaveNotebookLmConfig(text, _notebookName);
                 UpdateNotebookLmStatus(true, text, _notebookName, false);
-                ShowModernToast("Đã lưu và kết nối NotebookLM thành công!", "🟢", "#10B981");
+                ShowModernToast("Đã lưu và xác thực Sổ tay thành công!", "🟢", "#10B981");
             }
             else
             {
                 UpdateNotebookLmStatus(false, text, "", false);
-                ShowModernToast("Vui lòng nhập đúng định dạng link NotebookLM (notebooklm.google.com/...)!", "⚠️", "#F59E0B");
+                ShowModernToast("Vui lòng nhập link Sổ tay thật dạng https://notebooklm.google.com/notebook/<id>!", "⚠️", "#EF4444");
             }
         }
 
@@ -1441,16 +1452,16 @@ namespace DynamicIsland
             string text = InputNotebookUrl.Text.Trim();
             TxtNotebookUrlPlaceholder.Visibility = string.IsNullOrEmpty(text) ? Visibility.Visible : Visibility.Collapsed;
 
-            bool isValid = IsValidNotebookLmUrl(text);
+            bool authentic = IsAuthenticNotebookLink(text);
             string detected = ExtractNotebookName("", text);
             if (!string.IsNullOrWhiteSpace(detected))
             {
                 _notebookName = detected;
                 TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
             }
-            UpdateNotebookLmStatus(isValid, text, _notebookName, false);
+            UpdateNotebookLmStatus(authentic, text, _notebookName, false);
 
-            if (isValid)
+            if (authentic)
             {
                 SaveNotebookLmConfig(text, _notebookName);
             }
@@ -1481,7 +1492,7 @@ namespace DynamicIsland
         {
             var ofd = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "Chọn file đưa vào NotebookLM",
+                Title = "Chọn file đưa vào Sổ tay NotebookLM",
                 Filter = "Tất cả file hỗ trợ (*.*)|*.*|Tài liệu PDF & Office (*.pdf;*.docx;*.txt;*.md)|*.pdf;*.docx;*.txt;*.md|Âm thanh (*.mp3;*.wav)|*.mp3;*.wav"
             };
             if (ofd.ShowDialog() == true)
@@ -1492,7 +1503,10 @@ namespace DynamicIsland
 
         private void SetSelectedFile(string path)
         {
+            _currentSourceType = SourceType.File;
             _currentFilePath = path;
+            _currentSourceUrl = null;
+
             var fi = new FileInfo(path);
             TxtFileName.Text = fi.Name;
             TxtFileMeta.Text = $"{fi.Length / 1024.0:F1} KB • {fi.Extension.ToUpper()} • Cập nhật: {fi.LastWriteTime:dd/MM/yyyy HH:mm}";
@@ -1515,6 +1529,46 @@ namespace DynamicIsland
             ShowModernToast($"Đã nhận tệp: {fi.Name}", "📎", "#10B981");
         }
 
+        private void SetSelectedLink(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return;
+            url = url.Trim();
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "https://" + url;
+            }
+
+            _currentSourceType = SourceType.Link;
+            _currentSourceUrl = url;
+            _currentFilePath = null;
+
+            TxtFileName.Text = url;
+            TxtFileIcon.Text = (url.Contains("youtube.com") || url.Contains("youtu.be")) ? "🎬" : "🌐";
+            TxtFileMeta.Text = "Nguồn liên kết trực tuyến • Sẵn sàng add vào Sổ tay NotebookLM";
+            BtnClearFiles.Visibility = Visibility.Visible;
+
+            ShowModernToast("Đã nhận Link nguồn để add vào Sổ tay!", "🔗", "#10B981");
+        }
+
+        private void BtnPasteSourceLink_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (Clipboard.ContainsText())
+                {
+                    string clip = Clipboard.GetText().Trim();
+                    if (clip.StartsWith("http://", StringComparison.OrdinalIgnoreCase) || clip.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        SetSelectedLink(clip);
+                        return;
+                    }
+                }
+            }
+            catch { }
+
+            ShowModernToast("Hãy copy link (YouTube, Web, Doc...) vào Clipboard rồi bấm lại nút này!", "📋", "#38BDF8");
+        }
+
         private void BtnOpenDownloads_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -1535,71 +1589,73 @@ namespace DynamicIsland
             }
         }
 
-        private void BtnCopyPath_Click(object sender, RoutedEventArgs e)
-        {
-            string path = _currentFilePath ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads";
-            try
-            {
-                Clipboard.SetText(path);
-                string fileName = Path.GetFileName(path);
-                ShowModernToast($"Đã copy đường dẫn: {(string.IsNullOrEmpty(fileName) ? path : fileName)}", "📋", "#38BDF8");
-            }
-            catch { }
-        }
-
         private async void BtnSendToNotebookLM_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrEmpty(_currentFilePath) || !File.Exists(_currentFilePath))
+            string url = InputNotebookUrl.Text.Trim();
+            if (!IsAuthenticNotebookLink(url))
             {
-                ShowModernToast("Vui lòng kéo thả hoặc chọn file trước khi gửi vào NotebookLM!", "⚠️", "#F59E0B");
+                ShowModernToast("Vui lòng nhập link Sổ tay thật (.../notebook/ID) trước khi thêm nguồn!", "⚠️", "#F59E0B");
                 return;
             }
 
-            string url = !string.IsNullOrWhiteSpace(InputNotebookUrl.Text)
-                ? InputNotebookUrl.Text.Trim()
-                : "https://notebooklm.google.com/";
-
-            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            if (_currentSourceType == SourceType.None ||
+                (_currentSourceType == SourceType.File && string.IsNullOrEmpty(_currentFilePath)) ||
+                (_currentSourceType == SourceType.Link && string.IsNullOrEmpty(_currentSourceUrl)))
             {
-                url = "https://" + url;
+                ShowModernToast("Vui lòng kéo thả tệp hoặc dán Link nguồn trước khi thêm!", "⚠️", "#F59E0B");
+                return;
             }
 
-            // Put file and text contents into clipboard for seamless NotebookLM ingestion
-            try
-            {
-                var dataObject = new DataObject();
-                var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath };
-                dataObject.SetFileDropList(fileDrop);
-
-                var fi = new FileInfo(_currentFilePath);
-                string ext = fi.Extension.ToLowerInvariant();
-                if (ext == ".txt" || ext == ".md" || ext == ".csv" || ext == ".json" || ext == ".cs" || ext == ".py" || ext == ".js" || ext == ".html" || ext == ".xml")
-                {
-                    if (fi.Length <= 2 * 1024 * 1024)
-                    {
-                        string text = File.ReadAllText(_currentFilePath);
-                        dataObject.SetText(text);
-                    }
-                }
-                Clipboard.SetDataObject(dataObject, true);
-            }
-            catch
+            // 1. Prepare Clipboard data according to source type
+            if (_currentSourceType == SourceType.File)
             {
                 try
                 {
-                    var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath };
-                    Clipboard.SetFileDropList(fileDrop);
+                    var dataObject = new DataObject();
+                    var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath! };
+                    dataObject.SetFileDropList(fileDrop);
+
+                    var fi = new FileInfo(_currentFilePath!);
+                    string ext = fi.Extension.ToLowerInvariant();
+                    if (ext == ".txt" || ext == ".md" || ext == ".csv" || ext == ".json" || ext == ".cs" || ext == ".py" || ext == ".js" || ext == ".html" || ext == ".xml")
+                    {
+                        if (fi.Length <= 2 * 1024 * 1024)
+                        {
+                            string text = File.ReadAllText(_currentFilePath!);
+                            dataObject.SetText(text);
+                        }
+                    }
+                    Clipboard.SetDataObject(dataObject, true);
+                }
+                catch
+                {
+                    try
+                    {
+                        var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath! };
+                        Clipboard.SetFileDropList(fileDrop);
+                    }
+                    catch { }
+                }
+            }
+            else if (_currentSourceType == SourceType.Link)
+            {
+                try
+                {
+                    Clipboard.SetText(_currentSourceUrl!);
                 }
                 catch { }
             }
 
-            string fileName = Path.GetFileName(_currentFilePath);
+            string sourceName = _currentSourceType == SourceType.File
+                ? Path.GetFileName(_currentFilePath!)
+                : _currentSourceUrl!;
+
+            // 2. Find running NotebookLM window/tab
             IntPtr hWnd = FindNotebookLmWindow(out string windowTitle);
 
             if (hWnd != IntPtr.Zero)
             {
-                // CASE 1: Tab/Window is ALREADY open!
-                // Directly focus it and paste without opening any new browser tab
+                // EXISTING NOTEBOOKLM WINDOW FOUND: Bring it to front and paste directly without opening any new tab!
                 string detected = ExtractNotebookName(windowTitle, url);
                 if (!string.IsNullOrWhiteSpace(detected))
                 {
@@ -1611,8 +1667,8 @@ namespace DynamicIsland
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
 
-                TxtFileMeta.Text = $"⚡ Đang thêm trực tiếp '{fileName}' vào {targetTitle}...";
-                ShowModernToast($"Đang tự động thêm '{fileName}' vào {targetTitle}...", "⚡", "#10B981");
+                TxtFileMeta.Text = $"⚡ Đang add thẳng nguồn vào {targetTitle}...";
+                ShowModernToast($"Đang tự động add nguồn vào {targetTitle}...", "⚡", "#10B981");
 
                 await Task.Delay(260);
                 keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
@@ -1620,15 +1676,22 @@ namespace DynamicIsland
                 keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
                 keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
 
-                TxtFileMeta.Text = $"✅ Đã gửi thẳng '{fileName}' vào {targetTitle}! (Không mở thêm tab)";
-                ShowModernToast($"Đã thêm thẳng '{fileName}' vào {targetTitle}!", "✅", "#10B981");
+                if (_currentSourceType == SourceType.Link)
+                {
+                    // Confirm paste dialog in NotebookLM with Enter
+                    await Task.Delay(350);
+                    keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);
+                    keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                }
+
+                TxtFileMeta.Text = $"✅ Đã add thẳng vào {targetTitle}! (Không mở thêm tab)";
+                ShowModernToast($"Đã add nguồn thẳng vào {targetTitle}!", "✅", "#10B981");
             }
             else
             {
-                // CASE 2: No NotebookLM window open yet
-                // Open notebook URL once and auto-paste when ready
-                TxtFileMeta.Text = $"🚀 Đang mở NotebookLM và chuẩn bị thêm '{fileName}'...";
-                ShowModernToast($"Đang mở NotebookLM và thêm '{fileName}'...", "🚀", "#38BDF8");
+                // NO WINDOW OPEN YET: Open verified notebook link once, then inject
+                TxtFileMeta.Text = "🚀 Đang mở Sổ tay đã xác thực và chuẩn bị add nguồn...";
+                ShowModernToast("Đang mở Sổ tay NotebookLM để nạp nguồn...", "🚀", "#38BDF8");
 
                 try
                 {
@@ -1658,6 +1721,13 @@ namespace DynamicIsland
                             keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
                             keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
 
+                            if (_currentSourceType == SourceType.Link)
+                            {
+                                await Task.Delay(350);
+                                keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);
+                                keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                            }
+
                             Dispatcher.Invoke(() =>
                             {
                                 string detected = ExtractNotebookName(newTitle, url);
@@ -1666,8 +1736,8 @@ namespace DynamicIsland
                                     _notebookName = detected;
                                     TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
                                 }
-                                TxtFileMeta.Text = $"✅ Đã thêm '{fileName}' vào NotebookLM thành công!";
-                                ShowModernToast($"Đã tự động thêm '{fileName}' vào NotebookLM!", "✅", "#10B981");
+                                TxtFileMeta.Text = "✅ Đã add nguồn vào NotebookLM thành công!";
+                                ShowModernToast("Đã tự động add nguồn vào NotebookLM!", "✅", "#10B981");
                             });
                             break;
                         }
@@ -1678,9 +1748,11 @@ namespace DynamicIsland
 
         private void BtnClearFiles_Click(object sender, RoutedEventArgs e)
         {
+            _currentSourceType = SourceType.None;
             _currentFilePath = null;
-            TxtFileName.Text = "Kéo thả file vào đây (PDF, Word, TXT, CSV, Code, Audio...)";
-            TxtFileMeta.Text = "Chưa có file nào • Thả file để chuẩn bị đưa vào NotebookLM";
+            _currentSourceUrl = null;
+            TxtFileName.Text = "Kéo thả tệp hoặc bấm 'Dán Link nguồn' (Web, YouTube, Tài liệu...)";
+            TxtFileMeta.Text = "Chưa có nguồn nào • Thả tệp hoặc dán liên kết để chuẩn bị đưa vào Sổ tay";
             TxtFileIcon.Text = "📄";
             BtnClearFiles.Visibility = Visibility.Collapsed;
         }
@@ -1819,15 +1891,15 @@ namespace DynamicIsland
                         break;
 
                     case IslandState.Notification:
-                        targetWidth = 620;
-                        targetHeight = 155;
+                        targetWidth = 660;
+                        targetHeight = 160;
                         targetView = ViewNotification;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#0284C7");
                         break;
 
                     case IslandState.Dropzone:
-                        targetWidth = 640;
-                        targetHeight = 145;
+                        targetWidth = 660;
+                        targetHeight = 155;
                         targetView = ViewDropzone;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#10B981");
                         _ = DetectAndRefreshNotebookAsync(showToast: false);
@@ -2145,17 +2217,52 @@ namespace DynamicIsland
             UpdateNotificationUI();
         }
 
+        private void LoadDeletedNotifications()
+        {
+            try
+            {
+                if (File.Exists(_deletedNotifsPath))
+                {
+                    var lines = File.ReadAllLines(_deletedNotifsPath);
+                    foreach (var line in lines)
+                    {
+                        if (long.TryParse(line.Trim(), out long id))
+                        {
+                            _deletedNotificationIds.Add(id);
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void SaveDeletedNotifications()
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(_deletedNotifsPath)!;
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                File.WriteAllLines(_deletedNotifsPath, _deletedNotificationIds.Select(id => id.ToString()));
+            }
+            catch { }
+        }
+
         private void BtnDeleteNotification_Click(object sender, RoutedEventArgs e)
         {
             if (_currentNotification != null)
             {
-                _realNotificationsList.Remove(_currentNotification);
+                long id = _currentNotification.Id;
+                _deletedNotificationIds.Add(id);
+                SaveDeletedNotifications();
+
+                _realNotificationsList.RemoveAll(n => n.Id == id);
                 var filtered = GetFilteredNotifications();
                 if (_currentFilteredIndex >= filtered.Count)
                 {
                     _currentFilteredIndex = Math.Max(0, filtered.Count - 1);
                 }
                 UpdateNotificationUI();
+                ShowModernToast("Đã xóa vĩnh viễn thông báo này!", "🗑️", "#EF4444");
             }
         }
 
@@ -2183,6 +2290,8 @@ namespace DynamicIsland
         {
             Dispatcher.InvokeAsync(() =>
             {
+                if (_deletedNotificationIds.Contains(r.Id)) return; // Ignore if deleted!
+
                 var notif = new DynamicNotification
                 {
                     Id = r.Id,
@@ -2195,7 +2304,11 @@ namespace DynamicIsland
                     PrimaryId = r.PrimaryId
                 };
 
-                _realNotificationsList.Insert(0, notif);
+                // Avoid duplicate
+                if (!_realNotificationsList.Any(n => n.Id == notif.Id))
+                {
+                    _realNotificationsList.Insert(0, notif);
+                }
 
                 // If currently filtered by specific app, match filter
                 if (_currentFilter == NotificationFilter.Zalo && !notif.AppName.Equals("Zalo", StringComparison.OrdinalIgnoreCase))
@@ -2219,7 +2332,9 @@ namespace DynamicIsland
 
         public void ShowNotification(DynamicNotification notif)
         {
-            if (!_realNotificationsList.Contains(notif))
+            if (_deletedNotificationIds.Contains(notif.Id)) return;
+
+            if (!_realNotificationsList.Any(n => n.Id == notif.Id))
             {
                 _realNotificationsList.Insert(0, notif);
             }
@@ -2238,10 +2353,11 @@ namespace DynamicIsland
                 // Sample Facebook notification
                 sampleNotif = new DynamicNotification
                 {
+                    Id = DateTime.Now.Ticks,
                     AppName = "Facebook",
                     AppIcon = "📘",
                     AppColor = "#1877F2",
-                    Sender = "Facebook • Nguyễn Hoàng",
+                    Sender = "Nguyễn Hoàng",
                     Message = "Đã nhắc đến bạn trong một bình luận: 'Alo bạn xem bài viết mới này hay quá nè!'",
                     Time = DateTime.Now.ToString("HH:mm"),
                     PrimaryId = "facebook"
@@ -2252,10 +2368,11 @@ namespace DynamicIsland
                 // Sample Zalo notification
                 sampleNotif = new DynamicNotification
                 {
+                    Id = DateTime.Now.Ticks,
                     AppName = "Zalo",
                     AppIcon = "💬",
                     AppColor = "#0068FF",
-                    Sender = "Zalo • Trần Hải Đăng",
+                    Sender = "Trần Hải Đăng",
                     Message = "Alo bạn ơi! Tài liệu thiết kế dự án đã hoàn thiện rồi nhé, bạn xem qua rồi phản hồi mình nha!",
                     Time = DateTime.Now.ToString("HH:mm"),
                     PrimaryId = "com.vng.zalo"
@@ -2281,31 +2398,46 @@ namespace DynamicIsland
             }
         }
 
-        private void BtnSendReply_Click(object sender, RoutedEventArgs e)
+        private async void BtnSendReply_Click(object sender, RoutedEventArgs e)
         {
             string reply = InputReply.Text.Trim();
             if (string.IsNullOrWhiteSpace(reply)) return;
 
             string senderName = TxtNotifySender.Text;
-            string appName = TxtAppTag.Text;
+            string appName = _currentNotification?.AppName ?? TxtAppTag.Text;
 
-            // Copy to Windows Clipboard
+            // 1. Copy to Windows Clipboard
             try
             {
                 Clipboard.SetText(reply);
             }
             catch { }
 
-            // Bring application window (e.g. Zalo, Telegram, Facebook) to front!
-            RealNotificationService.FocusApp(_currentNotification?.PrimaryId);
+            // 2. Bring application or browser window to front!
+            IntPtr targetHwnd = RealNotificationService.FocusApp(_currentNotification?.PrimaryId, appName);
 
-            // Visual feedback
-            TxtNotifySender.Text = $"✓ Đã sao chép phản hồi!";
-            TxtNotifyContent.Text = $"Đã sao chép: \"{reply}\" và mở {appName}. Bạn có thể dán ngay bằng Ctrl+V!";
+            TxtNotifyContent.Text = $"⚡ Đang gửi trả lời tới {senderName} trên {appName}...";
+            ShowModernToast($"Đang gửi phản hồi tới {senderName}...", "💬", "#38BDF8");
+
+            // 3. Automate Ctrl+V paste and Enter to send directly!
+            await Task.Delay(260);
+            keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_V, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+            await Task.Delay(120);
+            keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+            // 4. Visual feedback
+            TxtNotifySender.Text = $"✓ Đã gửi cho {senderName}!";
+            TxtNotifyContent.Text = $"✓ Bạn: \"{reply}\" (Đã gửi qua {appName})";
             InputReply.Text = "";
+            ShowModernToast($"Đã gửi tin nhắn tới {senderName} trên {appName}!", "🚀", "#10B981");
 
-            // Auto-collapse back to Compact after 2.2 seconds
-            var returnTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2200) };
+            // Auto-collapse back to Compact after 2.5 seconds
+            var returnTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2500) };
             returnTimer.Tick += (s, args) =>
             {
                 returnTimer.Stop();
@@ -2331,6 +2463,7 @@ namespace DynamicIsland
             string fileName = _currentFilePath != null ? Path.GetFileName(_currentFilePath) : "file đính kèm";
             var shareNotif = new DynamicNotification
             {
+                Id = DateTime.Now.Ticks,
                 AppName = "Zalo",
                 AppIcon = "💬",
                 AppColor = "#0068FF",

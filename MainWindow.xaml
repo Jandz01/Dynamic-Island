@@ -683,7 +683,7 @@
                         </Grid.RowDefinitions>
 
                         <!-- Header: App Badge, Sender Name, Filter Tabs, Delete & Navigation -->
-                        <Grid Grid.Row="0">
+                        <Grid Grid.Row="0" Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -691,7 +691,7 @@
                             </Grid.ColumnDefinitions>
 
                             <!-- App Icon & Badge with Drag Handle -->
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
                                 <Border Tag="DragGrip" Background="#1E293B" CornerRadius="5" Padding="5,2" Margin="0,0,8,0"
                                         Cursor="SizeAll" ToolTip="Giữ chuột vào đây để kéo di chuyển Dynamic Island (Click đúp để về giữa)"
                                         PreviewMouseLeftButtonDown="DragHandle_PreviewMouseLeftButtonDown"
@@ -702,7 +702,7 @@
                                 </Border>
 
                                 <Border x:Name="BadgeAppIcon" Width="28" Height="28" CornerRadius="14" 
-                                        Background="#0068FF" Margin="0,0,10,0" VerticalAlignment="Center">
+                                        Background="#0068FF" Margin="0,0,8,0" VerticalAlignment="Center">
                                     <Border.Effect>
                                         <DropShadowEffect x:Name="BadgeAppGlow" Color="#0068FF" BlurRadius="12" ShadowDepth="0" Opacity="0.8"/>
                                     </Border.Effect>
@@ -711,7 +711,7 @@
                                 </Border>
                                 <StackPanel VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="TxtNotifySender" Text="Trần Hải Đăng" Foreground="#F8FAFC" FontSize="13" FontWeight="Bold" Margin="0,0,6,0"/>
+                                        <TextBlock x:Name="TxtNotifySender" Text="Trần Hải Đăng" Foreground="#F8FAFC" FontSize="12.5" FontWeight="Bold" MaxWidth="110" TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
                                         <Border x:Name="BorderAppTag" Background="#0C2540" BorderBrush="#0284C7" BorderThickness="0.8" CornerRadius="8" Padding="5,1" VerticalAlignment="Center">
                                             <TextBlock x:Name="TxtAppTag" Text="Zalo" Foreground="#38BDF8" FontSize="9.5" FontWeight="SemiBold"/>
                                         </Border>
@@ -722,16 +722,16 @@
 
                             <!-- Filter Tabs: Tất cả | Zalo | Facebook -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Button x:Name="BtnFilterAll" Style="{StaticResource ActionChipStyle}" Content="Tất cả (0)" Padding="7,3" Margin="0,0,4,0" Click="BtnFilterAll_Click"/>
-                                <Button x:Name="BtnFilterZalo" Style="{StaticResource ActionChipStyle}" Content="💬 Zalo (0)" Padding="7,3" Margin="0,0,4,0" Click="BtnFilterZalo_Click"/>
-                                <Button x:Name="BtnFilterFacebook" Style="{StaticResource ActionChipStyle}" Content="📘 Facebook (0)" Padding="7,3" Click="BtnFilterFacebook_Click"/>
+                                <Button x:Name="BtnFilterAll" Style="{StaticResource ActionChipStyle}" Content="Tất cả (0)" Padding="6,2" Margin="0,0,3,0" Click="BtnFilterAll_Click"/>
+                                <Button x:Name="BtnFilterZalo" Style="{StaticResource ActionChipStyle}" Content="💬 Zalo (0)" Padding="6,2" Margin="0,0,3,0" Click="BtnFilterZalo_Click"/>
+                                <Button x:Name="BtnFilterFacebook" Style="{StaticResource ActionChipStyle}" Content="📘 Facebook (0)" Padding="6,2" Click="BtnFilterFacebook_Click"/>
                             </StackPanel>
 
-                            <!-- Right Controls: Delete, Prev, Index, Next, Test, Close -->
+                            <!-- Right Controls: Delete, Prev, Index, Next, Close -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                                 <!-- Delete / Dismiss Button -->
                                 <Button x:Name="BtnDeleteNotification" Style="{StaticResource ActionChipStyle}" Background="#2B1219" BorderBrush="#E11D48" Foreground="#FDA4AF"
-                                        Content="🗑️ Xóa" ToolTip="Xóa thông báo này để xem thông báo tiếp theo" Margin="0,0,6,0" Click="BtnDeleteNotification_Click"/>
+                                        Content="🗑️ Xóa" ToolTip="Xóa vĩnh viễn thông báo này (không bao giờ lặp lại)" Margin="0,0,6,0" Padding="6,2" Click="BtnDeleteNotification_Click"/>
                                 
                                 <!-- Prev / Next Page -->
                                 <Button x:Name="BtnPrevNotif" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Thông báo trước" Click="BtnPrevNotif_Click">
@@ -742,9 +742,6 @@
                                     <TextBlock Text="▶" FontSize="9"/>
                                 </Button>
 
-                                <Button x:Name="BtnSimulateMsg" Style="{StaticResource CircleIconBtn}" Width="22" Height="22" ToolTip="Thử nhận thông báo mẫu" Click="BtnSimulateMsg_Click" Margin="0,0,4,0">
-                                    <TextBlock Text="🔔" FontSize="10"/>
-                                </Button>
                                 <Button Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Đóng" Click="BtnCloseToCompact_Click">
                                     <TextBlock Text="✕" FontSize="11"/>
                                 </Button>
@@ -752,7 +749,7 @@
                         </Grid>
 
                         <!-- Message Content Preview Bubble (or Empty State) -->
-                        <Grid Grid.Row="1" Margin="0,6">
+                        <Grid Grid.Row="1" Margin="0,4">
                             <!-- Bubble with text -->
                             <Border x:Name="BorderMsgBubble" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" 
                                     CornerRadius="10" Padding="12,6">
@@ -764,7 +761,7 @@
                             <!-- Empty State Card -->
                             <Border x:Name="BorderEmptyState" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" 
                                     CornerRadius="10" Padding="12,6" Visibility="Collapsed">
-                                <TextBlock Text="🎉 Không có thông báo nào trong mục này (Đã đọc/xóa hết)!" 
+                                <TextBlock Text="🎉 Không có thông báo nào trong mục này (Đã xóa/đọc hết)!" 
                                            Foreground="#64748B" FontSize="11.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                         </Grid>
@@ -777,12 +774,12 @@
                             </Grid.ColumnDefinitions>
 
                             <Grid Grid.Column="0" Margin="0,0,8,0">
-                                <Border Background="#0B0F17" BorderBrush="#334155" BorderThickness="1" CornerRadius="14" Padding="12,4">
+                                <Border Background="#0B0F17" BorderBrush="#334155" BorderThickness="1" CornerRadius="14" Padding="12,3">
                                     <Grid>
-                                        <TextBlock x:Name="TxtReplyPlaceholder" Text="Nhập nội dung trả lời nhanh..." Foreground="#64748B" 
-                                                   FontSize="11.5" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                        <TextBlock x:Name="TxtReplyPlaceholder" Text="Nhập nội dung trả lời trực tiếp..." Foreground="#64748B" 
+                                                   FontSize="11" VerticalAlignment="Center" IsHitTestVisible="False"/>
                                         <TextBox x:Name="InputReply" Background="Transparent" Foreground="#F8FAFC" BorderThickness="0" 
-                                                 FontSize="12" VerticalAlignment="Center"
+                                                 FontSize="11.5" VerticalAlignment="Center"
                                                  TextChanged="InputReply_TextChanged"
                                                  KeyDown="InputReply_KeyDown"/>
                                     </Grid>
@@ -790,16 +787,16 @@
                             </Grid>
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Style="{StaticResource ActionChipStyle}" Content="👍 Ok bạn" Margin="0,0,4,0" Click="ChipReply_Click"/>
-                                <Button Style="{StaticResource ActionChipStyle}" Content="⏳ Đợi 5p" Margin="0,0,4,0" Click="ChipReply_Click"/>
+                                <Button Style="{StaticResource ActionChipStyle}" Content="👍 Ok" Padding="6,2" Margin="0,0,3,0" Click="ChipReply_Click"/>
+                                <Button Style="{StaticResource ActionChipStyle}" Content="⏳ Đợi 5p" Padding="6,2" Margin="0,0,4,0" Click="ChipReply_Click"/>
                                 <Button x:Name="BtnSendReply" Style="{StaticResource ActionChipStyle}" 
                                         Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
-                                        Content="➤ Gửi" Click="BtnSendReply_Click"/>
+                                        Content="➤ Gửi" Padding="10,3" Click="BtnSendReply_Click"/>
                             </StackPanel>
                         </Grid>
                     </Grid>
 
-                    <!-- 7. DROPZONE TASK: NOTEBOOKLM INTEGRATION (Size: 640x145) -->
+                    <!-- 7. DROPZONE TASK: NOTEBOOKLM INTEGRATION (Size: 660x155) -->
                     <Grid x:Name="ViewDropzone" Visibility="Collapsed" Margin="16,8"
                           AllowDrop="True" Drop="Dropzone_Drop" DragOver="Dropzone_DragOver">
                         <Grid.RowDefinitions>
@@ -830,15 +827,15 @@
 
                                 <TextBlock Text="📁" FontSize="14" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock x:Name="TxtNotebookHeaderTitle" Text="NotebookLM" Foreground="#F8FAFC" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
-                                <Border x:Name="BorderNotebookStatus" Background="#291F03" BorderBrush="#EAB308" BorderThickness="0.8" CornerRadius="8" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtNotebookStatus" Text="🟡 Chưa liên kết NotebookLM" Foreground="#FDE047" FontSize="10" FontWeight="SemiBold"/>
+                                <Border x:Name="BorderNotebookStatus" Background="#291219" BorderBrush="#E11D48" BorderThickness="0.8" CornerRadius="8" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtNotebookStatus" Text="🔴 Chưa xác thực Sổ tay" Foreground="#FDA4AF" FontSize="10" FontWeight="SemiBold"/>
                                 </Border>
                             </StackPanel>
 
                             <!-- NotebookLM URL Input -->
                             <Border Grid.Column="1" Background="#0A0F1A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="6,2" Margin="0,0,6,0">
                                 <Grid>
-                                    <TextBlock x:Name="TxtNotebookUrlPlaceholder" Text="Nhập hoặc dán link sổ tay (https://notebooklm.google.com/notebook/...)..." Foreground="#64748B" FontSize="10.5" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                    <TextBlock x:Name="TxtNotebookUrlPlaceholder" Text="Nhập link Sổ tay thật (https://notebooklm.google.com/notebook/[id])..." Foreground="#64748B" FontSize="10.5" VerticalAlignment="Center" IsHitTestVisible="False"/>
                                     <TextBox x:Name="InputNotebookUrl" Background="Transparent" Foreground="#38BDF8" BorderThickness="0" FontSize="11" VerticalAlignment="Center"
                                              TextChanged="InputNotebookUrl_TextChanged"/>
                                 </Grid>
@@ -861,7 +858,7 @@
                             </Button>
                         </Grid>
 
-                        <!-- File Drop Display Box -->
+                        <!-- Staged Source Display Box (Files OR Web Links) -->
                         <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,0,0,6">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -875,24 +872,24 @@
                                 </Border>
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtFileName" Text="Kéo thả file vào đây (PDF, Word, TXT, CSV, Code, Audio...)" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock x:Name="TxtFileMeta" Text="Chưa có file nào • Thả file để chuẩn bị đưa vào NotebookLM" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0"/>
+                                    <TextBlock x:Name="TxtFileName" Text="Kéo thả tệp hoặc bấm 'Dán Link nguồn' (Web, YouTube, Tài liệu...)" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="TxtFileMeta" Text="Chưa có nguồn nào • Thả tệp hoặc dán liên kết để chuẩn bị đưa vào Sổ tay" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0"/>
                                 </StackPanel>
 
-                                <Button x:Name="BtnClearFiles" Grid.Column="2" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Xóa file đã chọn" Visibility="Collapsed" Click="BtnClearFiles_Click">
+                                <Button x:Name="BtnClearFiles" Grid.Column="2" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Xóa nguồn đã chọn" Visibility="Collapsed" Click="BtnClearFiles_Click">
                                     <TextBlock Text="✕" FontSize="10" Foreground="#EF4444"/>
                                 </Button>
                             </Grid>
                         </Border>
 
-                        <!-- Action Buttons: Send to NotebookLM, Browse, Copy Path -->
+                        <!-- Action Buttons: Send to NotebookLM, Browse, Paste Link -->
                         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Style="{StaticResource ActionChipStyle}" Content="📎 Chọn File từ máy" Margin="0,0,6,0" Click="BtnBrowseFile_Click"/>
+                            <Button Style="{StaticResource ActionChipStyle}" Content="📎 Chọn Tệp từ máy" Margin="0,0,6,0" Click="BtnBrowseFile_Click"/>
+                            <Button x:Name="BtnPasteSourceLink" Style="{StaticResource ActionChipStyle}" Content="🔗 Dán Link nguồn" ToolTip="Dán đường dẫn YouTube, Trang web hoặc Tài liệu online để làm nguồn NotebookLM" Margin="0,0,6,0" Click="BtnPasteSourceLink_Click"/>
                             <Button Style="{StaticResource ActionChipStyle}" Content="📂 Mở thư mục" Margin="0,0,6,0" Click="BtnOpenDownloads_Click"/>
-                            <Button Style="{StaticResource ActionChipStyle}" Content="📋 Copy đường dẫn" Margin="0,0,6,0" Click="BtnCopyPath_Click"/>
                             <Button x:Name="BtnSendToNotebookLM" Style="{StaticResource ActionChipStyle}"
                                     Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
-                                    Content="⚡ Thêm thẳng vào Notebook" ToolTip="Gửi trực tiếp tài liệu vào Sổ tay đang mở mà không mở thêm tab mới" Click="BtnSendToNotebookLM_Click"/>
+                                    Content="⚡ Thêm thẳng vào Notebook" ToolTip="Đưa trực tiếp tệp/link vào Sổ tay NotebookLM đang mở mà không mở thêm tab mới" Click="BtnSendToNotebookLM_Click"/>
                         </StackPanel>
                     </Grid>
 

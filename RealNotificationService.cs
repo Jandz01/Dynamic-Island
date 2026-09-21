@@ -33,6 +33,22 @@ namespace DynamicIsland
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern int GetWindowTextLength(IntPtr hWnd);
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
         private readonly string _dbPath;
         private readonly string _dbDir;
         private long _lastNotificationId = 0;
@@ -41,6 +57,7 @@ namespace DynamicIsland
         private readonly object _lock = new();
         private bool _isDisposed = false;
 
+        public Func<long, bool>? IsDeletedPredicate { get; set; }
         public event Action<RealNotification>? NotificationReceived;
 
         public RealNotificationService()
@@ -134,6 +151,11 @@ namespace DynamicIsland
                             _lastNotificationId = id;
                         }
 
+                        if (IsDeletedPredicate != null && IsDeletedPredicate(id))
+                        {
+                            continue; // Skip permanently deleted notification!
+                        }
+
                         var notif = ParseFromPayload(id, primaryId, payload, arrivalTime);
                         if (notif != null)
                         {
@@ -145,7 +167,7 @@ namespace DynamicIsland
             }
         }
 
-        public List<RealNotification> GetRecentNotifications(int count = 6)
+        public List<RealNotification> GetRecentNotifications(int count = 10)
         {
             var list = new List<RealNotification>();
             try
@@ -160,12 +182,17 @@ namespace DynamicIsland
                     WHERE n.Type = 'toast'
                     ORDER BY n.ArrivalTime DESC
                     LIMIT @count;";
-                cmd.Parameters.AddWithValue("@count", count);
+                cmd.Parameters.AddWithValue("@count", count * 2);
 
                 using var reader = cmd.ExecuteReader();
-                while (reader.Read())
+                while (reader.Read() && list.Count < count)
                 {
                     long id = reader.GetInt64(0);
+                    if (IsDeletedPredicate != null && IsDeletedPredicate(id))
+                    {
+                        continue; // Skip deleted
+                    }
+
                     string? primaryId = reader.IsDBNull(1) ? null : reader.GetString(1);
                     byte[]? payload = reader.IsDBNull(2) ? null : (byte[])reader[2];
                     long arrivalTime = reader.IsDBNull(3) ? 0 : reader.GetInt64(3);
@@ -202,36 +229,74 @@ namespace DynamicIsland
                 var texts = doc.Descendants("text")
                                .Select(t => t.Value?.Trim())
                                .Where(v => !string.IsNullOrEmpty(v))
+                               .Select(v => v!)
                                .ToList();
                 if (texts.Count == 0) return null;
 
+                string pid = (primaryId ?? "").ToLowerInvariant();
+                string xmlLower = xmlStr.ToLowerInvariant();
+
                 string sender = texts[0]!;
                 string message = texts.Count > 1 ? string.Join("\n", texts.Skip(1)) : "";
+
+                // Accurate check for Zalo
+                bool isZalo = pid.Contains("zalo") ||
+                              xmlLower.Contains("zalo.me") ||
+                              xmlLower.Contains("chat.zalo.me") ||
+                              xmlLower.Contains("zalocdn") ||
+                              sender.Contains("Zalo", StringComparison.OrdinalIgnoreCase);
+
+                // Comprehensive check for Facebook (Web push, Messenger, Facebook App, etc.)
+                bool isFacebook = !isZalo && (
+                                  pid.Contains("facebook") ||
+                                  pid.Contains("messenger") ||
+                                  pid.Contains("meta") ||
+                                  xmlLower.Contains("facebook.com") ||
+                                  xmlLower.Contains("messenger.com") ||
+                                  xmlLower.Contains("m.me") ||
+                                  xmlLower.Contains("fbcdn.net") ||
+                                  xmlLower.Contains("fbcdn") ||
+                                  xmlLower.Contains("facebook") ||
+                                  xmlLower.Contains("messenger") ||
+                                  sender.Contains("Facebook", StringComparison.OrdinalIgnoreCase) ||
+                                  sender.Contains("Messenger", StringComparison.OrdinalIgnoreCase) ||
+                                  message.Contains("Facebook", StringComparison.OrdinalIgnoreCase));
 
                 string appName = "Windows";
                 string appIcon = "🔔";
                 string appColor = "#38BDF8";
 
-                string pid = (primaryId ?? "").ToLowerInvariant();
-                string xmlLower = xmlStr.ToLowerInvariant();
-
-                if (pid.Contains("zalo") || xmlLower.Contains("chat.zalo.me") || xmlLower.Contains("zalo.me"))
+                if (isZalo)
                 {
                     appName = "Zalo";
                     appIcon = "💬";
                     appColor = "#0068FF";
+
+                    // Clean generic sender names
+                    if ((sender.Equals("Zalo", StringComparison.OrdinalIgnoreCase) || sender.Contains("chat.zalo.me", StringComparison.OrdinalIgnoreCase)) && texts.Count > 1)
+                    {
+                        sender = texts[1];
+                        message = texts.Count > 2 ? string.Join("\n", texts.Skip(2)) : "";
+                    }
                 }
-                else if (pid.Contains("messenger"))
-                {
-                    appName = "Messenger";
-                    appIcon = "💬";
-                    appColor = "#0A7CFF";
-                }
-                else if (pid.Contains("facebook") || xmlLower.Contains("facebook.com") || sender.Contains("Facebook", StringComparison.OrdinalIgnoreCase))
+                else if (isFacebook)
                 {
                     appName = "Facebook";
                     appIcon = "📘";
                     appColor = "#1877F2";
+
+                    // Extract actual person's name if first text is generic
+                    if ((sender.Equals("Facebook", StringComparison.OrdinalIgnoreCase) ||
+                         sender.Equals("Messenger", StringComparison.OrdinalIgnoreCase) ||
+                         sender.Contains("facebook.com", StringComparison.OrdinalIgnoreCase)) && texts.Count > 1)
+                    {
+                        sender = texts[1];
+                        message = texts.Count > 2 ? string.Join("\n", texts.Skip(2)) : "";
+                    }
+                    else if (sender.StartsWith("Facebook • ", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sender = sender.Substring("Facebook • ".Length).Trim();
+                    }
                 }
                 else if (pid.Contains("telegram") || xmlLower.Contains("telegram"))
                 {
@@ -319,34 +384,92 @@ namespace DynamicIsland
             }
         }
 
-        public static void FocusApp(string? primaryId)
+        public static IntPtr FocusApp(string? primaryId, string appName = "")
         {
-            if (string.IsNullOrEmpty(primaryId)) return;
-            string pid = primaryId.ToLowerInvariant();
-            string procName = "";
-            if (pid.Contains("zalo")) procName = "Zalo";
-            else if (pid.Contains("telegram")) procName = "Telegram";
-            else if (pid.Contains("messenger")) procName = "Messenger";
-            else if (pid.Contains("chrome")) procName = "chrome";
-            else if (pid.Contains("edge")) procName = "msedge";
+            string pid = (primaryId ?? "").ToLowerInvariant();
+            string lowerApp = appName.ToLowerInvariant();
+            IntPtr targetHwnd = IntPtr.Zero;
 
-            if (!string.IsNullOrEmpty(procName))
+            if (lowerApp.Contains("zalo") || pid.Contains("zalo"))
+            {
+                var procs = Process.GetProcessesByName("Zalo");
+                foreach (var p in procs)
+                {
+                    if (p.MainWindowHandle != IntPtr.Zero)
+                    {
+                        ShowWindow(p.MainWindowHandle, 9);
+                        SetForegroundWindow(p.MainWindowHandle);
+                        return p.MainWindowHandle;
+                    }
+                }
+            }
+            else if (lowerApp.Contains("facebook") || lowerApp.Contains("messenger") || pid.Contains("facebook") || pid.Contains("messenger"))
+            {
+                var mProcs = Process.GetProcessesByName("Messenger");
+                foreach (var p in mProcs)
+                {
+                    if (p.MainWindowHandle != IntPtr.Zero)
+                    {
+                        ShowWindow(p.MainWindowHandle, 9);
+                        SetForegroundWindow(p.MainWindowHandle);
+                        return p.MainWindowHandle;
+                    }
+                }
+                var fbProcs = Process.GetProcessesByName("Facebook");
+                foreach (var p in fbProcs)
+                {
+                    if (p.MainWindowHandle != IntPtr.Zero)
+                    {
+                        ShowWindow(p.MainWindowHandle, 9);
+                        SetForegroundWindow(p.MainWindowHandle);
+                        return p.MainWindowHandle;
+                    }
+                }
+            }
+
+            // Find running browser window (Chrome, Edge, Brave, etc.) with relevant title
+            string searchKeyword = lowerApp.Contains("zalo") ? "Zalo" : "Facebook";
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (!IsWindowVisible(hWnd)) return true;
+                int len = GetWindowTextLength(hWnd);
+                if (len == 0) return true;
+                var sb = new StringBuilder(len + 1);
+                GetWindowText(hWnd, sb, sb.Capacity);
+                string title = sb.ToString();
+
+                if (title.Contains(searchKeyword, StringComparison.OrdinalIgnoreCase) ||
+                    (searchKeyword == "Facebook" && title.Contains("Messenger", StringComparison.OrdinalIgnoreCase)))
+                {
+                    targetHwnd = hWnd;
+                    ShowWindow(hWnd, 9);
+                    SetForegroundWindow(hWnd);
+                    return false;
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            if (targetHwnd != IntPtr.Zero) return targetHwnd;
+
+            // Fallback launch if app/web isn't open yet
+            if (lowerApp.Contains("facebook") || pid.Contains("facebook"))
             {
                 try
                 {
-                    var procs = Process.GetProcessesByName(procName);
-                    foreach (var p in procs)
-                    {
-                        if (p.MainWindowHandle != IntPtr.Zero)
-                        {
-                            ShowWindow(p.MainWindowHandle, 9); // SW_RESTORE
-                            SetForegroundWindow(p.MainWindowHandle);
-                            break;
-                        }
-                    }
+                    Process.Start(new ProcessStartInfo("https://www.facebook.com/messages/") { UseShellExecute = true });
                 }
                 catch { }
             }
+            else if (lowerApp.Contains("zalo") || pid.Contains("zalo"))
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo("https://chat.zalo.me/") { UseShellExecute = true });
+                }
+                catch { }
+            }
+
+            return targetHwnd;
         }
 
         public void Dispose()
