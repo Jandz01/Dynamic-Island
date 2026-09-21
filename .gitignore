@@ -29,5 +29,4 @@ publish_test/
 __pycache__/
 *.pyc
 scripts/build/
-scripts/*.exe
 *.log
