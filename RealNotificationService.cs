@@ -213,19 +213,27 @@ namespace DynamicIsland
                 string appColor = "#38BDF8";
 
                 string pid = (primaryId ?? "").ToLowerInvariant();
-                if (pid.Contains("zalo"))
+                string xmlLower = xmlStr.ToLowerInvariant();
+
+                if (pid.Contains("zalo") || xmlLower.Contains("chat.zalo.me") || xmlLower.Contains("zalo.me"))
                 {
                     appName = "Zalo";
                     appIcon = "💬";
                     appColor = "#0068FF";
                 }
-                else if (pid.Contains("messenger") || pid.Contains("facebook"))
+                else if (pid.Contains("messenger"))
                 {
                     appName = "Messenger";
                     appIcon = "💬";
                     appColor = "#0A7CFF";
                 }
-                else if (pid.Contains("telegram"))
+                else if (pid.Contains("facebook") || xmlLower.Contains("facebook.com") || sender.Contains("Facebook", StringComparison.OrdinalIgnoreCase))
+                {
+                    appName = "Facebook";
+                    appIcon = "📘";
+                    appColor = "#1877F2";
+                }
+                else if (pid.Contains("telegram") || xmlLower.Contains("telegram"))
                 {
                     appName = "Telegram";
                     appIcon = "✈️";
@@ -274,17 +282,20 @@ namespace DynamicIsland
                 var imgElem = doc.Descendants("image").FirstOrDefault(i => i.Attribute("src") != null);
                 string? imagePath = imgElem?.Attribute("src")?.Value;
 
-                string timeStr = "Vừa xong";
+                string timeStr = DateTime.Now.ToString("HH:mm");
                 if (arrivalTime > 0)
                 {
                     try
                     {
                         var dt = DateTime.FromFileTimeUtc(arrivalTime).ToLocalTime();
-                        var span = DateTime.Now - dt;
-                        if (span.TotalMinutes < 2) timeStr = "Vừa xong";
-                        else if (span.TotalMinutes < 60) timeStr = $"{(int)span.TotalMinutes} phút trước";
-                        else if (span.TotalHours < 24) timeStr = dt.ToString("HH:mm");
-                        else timeStr = dt.ToString("dd/MM HH:mm");
+                        if (dt.Year >= 2020 && dt <= DateTime.Now.AddMinutes(5))
+                        {
+                            var span = DateTime.Now - dt;
+                            if (span.TotalSeconds < 90) timeStr = "Vừa xong";
+                            else if (span.TotalMinutes < 60) timeStr = $"{(int)span.TotalMinutes}p trước ({dt:HH:mm})";
+                            else if (span.TotalHours < 24) timeStr = dt.ToString("HH:mm Hôm nay");
+                            else timeStr = dt.ToString("HH:mm dd/MM");
+                        }
                     }
                     catch { }
                 }

@@ -252,21 +252,21 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Satellite 3: Privacy Shield (Luminous Rose/Red) -->
-                <Border x:Name="OrbPrivacy" Style="{StaticResource OrbitalPlanetStyle}" 
+                <!-- Satellite 3: Lock Screen (Luminous Rose/Red) -->
+                <Border x:Name="OrbLockScreen" Style="{StaticResource OrbitalPlanetStyle}" 
                         Canvas.Left="314" Canvas.Top="124" Background="#4C0A1C" BorderBrush="#FB7185" BorderThickness="1.8"
-                        ToolTip="Privacy Shield" MouseLeftButtonDown="OrbPrivacy_Click"
+                        ToolTip="Khóa màn hình máy tính (Lock Screen)" MouseLeftButtonDown="OrbLockScreen_Click"
                         MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
                     <Border.RenderTransform>
                         <TransformGroup>
                             <ScaleTransform ScaleX="1" ScaleY="1"/>
-                            <TranslateTransform x:Name="TransPrivacy"/>
+                            <TranslateTransform x:Name="TransLockScreen"/>
                         </TransformGroup>
                     </Border.RenderTransform>
                     <Border.Effect><DropShadowEffect Color="#F43F5E" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="🔒" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="LblPrivacy" Text="Privacy" Foreground="#FFF1F2" FontSize="12.5" FontWeight="Bold" 
+                        <TextBlock x:Name="LblLockScreen" Text="Khóa máy" Foreground="#FFF1F2" FontSize="12.5" FontWeight="Bold" 
                                    Margin="8,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                     </StackPanel>
                 </Border>
@@ -274,7 +274,7 @@
                 <!-- Satellite 4: Dropzone (Luminous Emerald) -->
                 <Border x:Name="OrbDrop" Style="{StaticResource OrbitalPlanetStyle}" 
                         Canvas.Left="314" Canvas.Top="124" Background="#063E2D" BorderBrush="#34D399" BorderThickness="1.8"
-                        ToolTip="Dropzone Files" MouseLeftButtonDown="OrbDrop_Click"
+                        ToolTip="NotebookLM Dropzone Files" MouseLeftButtonDown="OrbDrop_Click"
                         MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
                     <Border.RenderTransform>
                         <TransformGroup>
@@ -290,21 +290,21 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Satellite 5: System Health (Luminous Cyan) -->
-                <Border x:Name="OrbSys" Style="{StaticResource OrbitalPlanetStyle}" 
-                        Canvas.Left="314" Canvas.Top="124" Background="#08304D" BorderBrush="#38BDF8" BorderThickness="1.8"
-                        ToolTip="System Health" MouseLeftButtonDown="OrbSys_Click"
+                <!-- Satellite 5: Camera Laptop (Luminous Emerald/Cyan) -->
+                <Border x:Name="OrbCamera" Style="{StaticResource OrbitalPlanetStyle}" 
+                        Canvas.Left="314" Canvas.Top="124" Background="#063E2D" BorderBrush="#10B981" BorderThickness="1.8"
+                        ToolTip="Bật Camera Laptop" MouseLeftButtonDown="OrbCamera_Click"
                         MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
                     <Border.RenderTransform>
                         <TransformGroup>
                             <ScaleTransform ScaleX="1" ScaleY="1"/>
-                            <TranslateTransform x:Name="TransSys"/>
+                            <TranslateTransform x:Name="TransCamera"/>
                         </TransformGroup>
                     </Border.RenderTransform>
-                    <Border.Effect><DropShadowEffect Color="#0EA5E9" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
+                    <Border.Effect><DropShadowEffect Color="#10B981" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="💊" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="LblSys" Text="Sysmon" Foreground="#F0F9FF" FontSize="12.5" FontWeight="Bold" 
+                        <TextBlock Text="📷" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblCamera" Text="Camera" Foreground="#ECFDF5" FontSize="12.5" FontWeight="Bold" 
                                    Margin="8,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                     </StackPanel>
                 </Border>
@@ -400,8 +400,16 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- Left: Real Time & Vietnamese Day/Date -->
+                        <!-- Left: Drag Grip Handle & Real Time -->
                         <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- Drag Handle :: để kéo di chuyển -->
+                            <Border x:Name="DragGripHandle" Background="#1E293B" CornerRadius="5" Padding="5,1" Margin="0,0,7,0"
+                                    Cursor="SizeAll" ToolTip="Giữ chuột vào đây để kéo di chuyển Dynamic Island"
+                                    PreviewMouseLeftButtonDown="DragHandle_PreviewMouseLeftButtonDown"
+                                    PreviewMouseMove="DragHandle_PreviewMouseMove"
+                                    PreviewMouseLeftButtonUp="DragHandle_PreviewMouseLeftButtonUp">
+                                <TextBlock Text="::" FontSize="13" Foreground="#94A3B8" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Border>
                             <TextBlock Text="🕒" FontSize="11" Margin="0,0,5,0" VerticalAlignment="Center"/>
                             <TextBlock x:Name="TxtClock" Text="04:29:41 Thứ Ba, 15/09" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
                         </StackPanel>
@@ -441,15 +449,19 @@
                                 </StackPanel>
                             </Border>
 
-                            <!-- Screen Recording Indicator (Pulsing Red Dot) -->
-                            <Grid Margin="5,0,0,0" VerticalAlignment="Center">
-                                <Ellipse x:Name="DotRecordPulse" Width="12" Height="12" Fill="#EF4444" Opacity="0.4">
-                                    <Ellipse.Effect>
-                                        <DropShadowEffect Color="#EF4444" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
-                                    </Ellipse.Effect>
-                                </Ellipse>
-                                <Ellipse Width="7" Height="7" Fill="#EF4444" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Grid>
+                            <!-- Screen Recording / Capture Button (Pulsing Red Dot) -->
+                            <Button x:Name="BtnRecordScreen" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" Margin="5,0,0,0"
+                                    ToolTip="Bật công cụ quay / chụp màn hình (Snipping Tool &amp; Game Bar)"
+                                    Click="BtnRecordScreen_Click">
+                                <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+                                    <Ellipse x:Name="DotRecordPulse" Width="13" Height="13" Fill="#EF4444" Opacity="0.4">
+                                        <Ellipse.Effect>
+                                            <DropShadowEffect Color="#EF4444" BlurRadius="10" ShadowDepth="0" Opacity="0.8"/>
+                                        </Ellipse.Effect>
+                                    </Ellipse>
+                                    <Ellipse Width="7" Height="7" Fill="#EF4444" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Grid>
+                            </Button>
                         </StackPanel>
 
                         <!-- Right: Position Arrows, Center Reset, Minisize & Exit App -->
@@ -588,56 +600,52 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- 5. SYSMON TASK (Size: 560x110) -->
-                    <Grid x:Name="ViewSysmon" Visibility="Collapsed" Margin="16,10">
+                    <!-- 5. CAMERA TASK (Size: 560x110) -->
+                    <Grid x:Name="ViewCamera" Visibility="Collapsed" Margin="16,10">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <!-- CPU -->
-                        <Border Grid.Column="0" Background="#0C2036" BorderBrush="#38BDF8" BorderThickness="1.2" CornerRadius="12" Padding="10,6" Margin="0,0,8,0">
-                            <StackPanel>
-                                <TextBlock Text="⚙️ CPU LOAD" Foreground="#7DD3FC" FontSize="10.5" FontWeight="Bold"/>
-                                <TextBlock x:Name="TxtSysCpu" Text="12%" Foreground="#F8FAFC" FontSize="17" FontWeight="Bold" Margin="0,2,0,0"/>
-                                <ProgressBar x:Name="ProgressSysCpu" Height="3.5" Margin="0,5,0,0" Background="#1E293B" Foreground="#0EA5E9" Value="12"/>
-                            </StackPanel>
+                        <Border Grid.Column="0" Width="50" Height="50" CornerRadius="16" Background="#063E2D" BorderBrush="#10B981" BorderThickness="1.5" Margin="0,0,14,0">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#10B981" BlurRadius="18" ShadowDepth="0" Opacity="0.8"/>
+                            </Border.Effect>
+                            <TextBlock Text="📷" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
 
-                        <!-- RAM -->
-                        <Border Grid.Column="1" Background="#191230" BorderBrush="#C084FC" BorderThickness="1.2" CornerRadius="12" Padding="10,6" Margin="0,0,8,0">
-                            <StackPanel>
-                                <TextBlock Text="📊 RAM USAGE" Foreground="#D8B4FE" FontSize="10.5" FontWeight="Bold"/>
-                                <TextBlock x:Name="TxtSysRam" Text="54%" Foreground="#F8FAFC" FontSize="17" FontWeight="Bold" Margin="0,2,0,0"/>
-                                <TextBlock x:Name="TxtSysRamGb" Text="8.6 GB / 16.0 GB" Foreground="#94A3B8" FontSize="9.5" Margin="0,2,0,0"/>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Camera Laptop &amp; Webcam" Foreground="#F8FAFC" FontSize="14" FontWeight="Bold" Margin="0,0,8,0"/>
+                                <Border Background="#064E3B" BorderBrush="#10B981" BorderThickness="0.8" CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
+                                    <TextBlock Text="Sẵn sàng" Foreground="#34D399" FontSize="10" FontWeight="SemiBold"/>
+                                </Border>
                             </StackPanel>
-                        </Border>
-
-                        <!-- ROM & Battery -->
-                        <Border Grid.Column="2" Background="#062920" BorderBrush="#34D399" BorderThickness="1.2" CornerRadius="12" Padding="10,6" Margin="0,0,8,0">
-                            <StackPanel>
-                                <TextBlock Text="💾 ROM &amp; POWER" Foreground="#6EE7B7" FontSize="10.5" FontWeight="Bold"/>
-                                <TextBlock x:Name="TxtSysBattery" Text="98% • Ổ C: 45%" Foreground="#F8FAFC" FontSize="12.5" FontWeight="Bold" Margin="0,2,0,0"/>
-                                <TextBlock x:Name="TxtSysUptime" Text="Uptime: 1d 4h" Foreground="#94A3B8" FontSize="9.5" Margin="0,3,0,0"/>
+                            <TextBlock Text="Bật nhanh ứng dụng Camera laptop để họp, chụp ảnh hoặc kiểm tra webcam" Foreground="#94A3B8" FontSize="11" Margin="0,2,0,6"/>
+                            
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource ActionChipStyle}" Background="#059669" BorderBrush="#34D399" Foreground="#FFFFFF" FontWeight="Bold"
+                                        Content="📷 Bật Camera ngay" Margin="0,0,6,0" Click="BtnLaunchCamera_Click"/>
+                                <Button Style="{StaticResource ActionChipStyle}" Content="⚙ Quyền riêng tư" Margin="0,0,6,0" Click="BtnCameraSettings_Click"/>
+                                <Button Style="{StaticResource ActionChipStyle}" Content="📸 Chụp màn hình" Click="BtnRecordScreen_Click"/>
                             </StackPanel>
-                        </Border>
+                        </StackPanel>
 
-                        <Button Grid.Column="3" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Top" Click="BtnCloseToCompact_Click">
+                        <Button Grid.Column="2" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Top" Click="BtnCloseToCompact_Click">
                             <TextBlock Text="✕" FontSize="12"/>
                         </Button>
                     </Grid>
 
-                    <!-- 6. NOTIFICATION TASK (Size: 620x145, Message Popup & Quick Reply) -->
-                    <Grid x:Name="ViewNotification" Visibility="Collapsed" Margin="16,10">
+                    <!-- 6. NOTIFICATION TASK (Size: 620x155, Message Popup, Filter Tabs & Quick Reply) -->
+                    <Grid x:Name="ViewNotification" Visibility="Collapsed" Margin="16,8">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <!-- Header: App Badge, Sender Name, Timestamp, Action Buttons -->
+                        <!-- Header: App Badge, Sender Name, Filter Tabs, Delete & Navigation -->
                         <Grid Grid.Row="0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -657,50 +665,78 @@
                                 </Border>
                                 <StackPanel VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="TxtNotifySender" Text="Trần Hải Đăng" Foreground="#F8FAFC" FontSize="13.5" FontWeight="Bold" Margin="0,0,8,0"/>
-                                        <Border x:Name="BorderAppTag" Background="#0C2540" BorderBrush="#0284C7" BorderThickness="0.8" CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
-                                            <TextBlock x:Name="TxtAppTag" Text="Zalo" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="TxtNotifySender" Text="Trần Hải Đăng" Foreground="#F8FAFC" FontSize="13" FontWeight="Bold" Margin="0,0,6,0"/>
+                                        <Border x:Name="BorderAppTag" Background="#0C2540" BorderBrush="#0284C7" BorderThickness="0.8" CornerRadius="8" Padding="5,1" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtAppTag" Text="Zalo" Foreground="#38BDF8" FontSize="9.5" FontWeight="SemiBold"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock x:Name="TxtNotifyTime" Text="Vừa xong • Tin nhắn mới" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0"/>
+                                    <TextBlock x:Name="TxtNotifyTime" Text="Vừa xong" Foreground="#94A3B8" FontSize="10" Margin="0,1,0,0"/>
                                 </StackPanel>
                             </StackPanel>
 
-                            <!-- Right Controls: Demo New Message & Close -->
+                            <!-- Filter Tabs: Tất cả | Zalo | Facebook -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Button x:Name="BtnFilterAll" Style="{StaticResource ActionChipStyle}" Content="Tất cả (0)" Padding="7,3" Margin="0,0,4,0" Click="BtnFilterAll_Click"/>
+                                <Button x:Name="BtnFilterZalo" Style="{StaticResource ActionChipStyle}" Content="💬 Zalo (0)" Padding="7,3" Margin="0,0,4,0" Click="BtnFilterZalo_Click"/>
+                                <Button x:Name="BtnFilterFacebook" Style="{StaticResource ActionChipStyle}" Content="📘 Facebook (0)" Padding="7,3" Click="BtnFilterFacebook_Click"/>
+                            </StackPanel>
+
+                            <!-- Right Controls: Delete, Prev, Index, Next, Test, Close -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button x:Name="BtnSimulateMsg" Style="{StaticResource ActionChipStyle}" Content="🔔 Thử tin mới" 
-                                        ToolTip="Mô phỏng tin nhắn mới (Zalo, Messenger, Telegram)" Click="BtnSimulateMsg_Click" Margin="0,0,6,0"/>
-                                <Button Style="{StaticResource CircleIconBtn}" ToolTip="Thu nhỏ" Click="BtnMiniSize_Click" Margin="0,0,6,0">
-                                    <TextBlock Text="➖" FontSize="11"/>
+                                <!-- Delete / Dismiss Button -->
+                                <Button x:Name="BtnDeleteNotification" Style="{StaticResource ActionChipStyle}" Background="#2B1219" BorderBrush="#E11D48" Foreground="#FDA4AF"
+                                        Content="🗑️ Xóa" ToolTip="Xóa thông báo này để xem thông báo tiếp theo" Margin="0,0,6,0" Click="BtnDeleteNotification_Click"/>
+                                
+                                <!-- Prev / Next Page -->
+                                <Button x:Name="BtnPrevNotif" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Thông báo trước" Click="BtnPrevNotif_Click">
+                                    <TextBlock Text="◀" FontSize="9"/>
                                 </Button>
-                                <Button Style="{StaticResource CircleIconBtn}" ToolTip="Đóng" Click="BtnCloseToCompact_Click">
-                                    <TextBlock Text="✕" FontSize="12"/>
+                                <TextBlock x:Name="TxtNotifCounter" Text="1/1" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" Margin="3,0"/>
+                                <Button x:Name="BtnNextNotif" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Thông báo kế tiếp" Margin="0,0,6,0" Click="BtnNextNotif_Click">
+                                    <TextBlock Text="▶" FontSize="9"/>
+                                </Button>
+
+                                <Button x:Name="BtnSimulateMsg" Style="{StaticResource CircleIconBtn}" Width="22" Height="22" ToolTip="Thử nhận thông báo mẫu" Click="BtnSimulateMsg_Click" Margin="0,0,4,0">
+                                    <TextBlock Text="🔔" FontSize="10"/>
+                                </Button>
+                                <Button Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Đóng" Click="BtnCloseToCompact_Click">
+                                    <TextBlock Text="✕" FontSize="11"/>
                                 </Button>
                             </StackPanel>
                         </Grid>
 
-                        <!-- Message Content Preview Bubble -->
-                        <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" 
-                                CornerRadius="10" Padding="12,7" Margin="0,8,0,8">
-                            <TextBlock x:Name="TxtNotifyContent" 
-                                       Text="Alo bạn ơi! Tài liệu thiết kế dự án đã hoàn thiện rồi nhé, bạn xem qua rồi phản hồi mình sớm nha!" 
-                                       Foreground="#E2E8F0" FontSize="12.5" TextWrapping="Wrap" MaxHeight="38" TextTrimming="CharacterEllipsis"/>
-                        </Border>
+                        <!-- Message Content Preview Bubble (or Empty State) -->
+                        <Grid Grid.Row="1" Margin="0,6">
+                            <!-- Bubble with text -->
+                            <Border x:Name="BorderMsgBubble" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" 
+                                    CornerRadius="10" Padding="12,6">
+                                <TextBlock x:Name="TxtNotifyContent" 
+                                           Text="Alo bạn ơi! Tài liệu thiết kế dự án đã hoàn thiện rồi nhé, bạn xem qua rồi phản hồi mình sớm nha!" 
+                                           Foreground="#E2E8F0" FontSize="12" TextWrapping="Wrap" MaxHeight="36" TextTrimming="CharacterEllipsis"/>
+                            </Border>
+
+                            <!-- Empty State Card -->
+                            <Border x:Name="BorderEmptyState" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" 
+                                    CornerRadius="10" Padding="12,6" Visibility="Collapsed">
+                                <TextBlock Text="🎉 Không có thông báo nào trong mục này (Đã đọc/xóa hết)!" 
+                                           Foreground="#64748B" FontSize="11.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
 
                         <!-- Quick Reply Bar: Suggestions Chips + Input Box + Send Button -->
-                        <Grid Grid.Row="2">
+                        <Grid x:Name="GridReplyBar" Grid.Row="2">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
                             <Grid Grid.Column="0" Margin="0,0,8,0">
-                                <Border Background="#0B0F17" BorderBrush="#334155" BorderThickness="1" CornerRadius="14" Padding="12,5">
+                                <Border Background="#0B0F17" BorderBrush="#334155" BorderThickness="1" CornerRadius="14" Padding="12,4">
                                     <Grid>
                                         <TextBlock x:Name="TxtReplyPlaceholder" Text="Nhập nội dung trả lời nhanh..." Foreground="#64748B" 
-                                                   FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                                   FontSize="11.5" VerticalAlignment="Center" IsHitTestVisible="False"/>
                                         <TextBox x:Name="InputReply" Background="Transparent" Foreground="#F8FAFC" BorderThickness="0" 
-                                                 FontSize="12.5" VerticalAlignment="Center"
+                                                 FontSize="12" VerticalAlignment="Center"
                                                  TextChanged="InputReply_TextChanged"
                                                  KeyDown="InputReply_KeyDown"/>
                                     </Grid>
@@ -717,41 +753,84 @@
                         </Grid>
                     </Grid>
 
-                    <!-- 7. DROPZONE TASK (Size: 540x120) -->
-                    <Grid x:Name="ViewDropzone" Visibility="Collapsed" Margin="16,10"
+                    <!-- 7. DROPZONE TASK: NOTEBOOKLM INTEGRATION (Size: 640x145) -->
+                    <Grid x:Name="ViewDropzone" Visibility="Collapsed" Margin="16,8"
                           AllowDrop="True" Drop="Dropzone_Drop" DragOver="Dropzone_DragOver">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                        <Border Grid.Column="0" Width="48" Height="48" CornerRadius="14" Background="#062E24" BorderThickness="1.5" BorderBrush="#10B981" Margin="0,0,14,0">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#10B981" BlurRadius="16" ShadowDepth="0" Opacity="0.7"/>
-                            </Border.Effect>
-                            <TextBlock x:Name="TxtFileIcon" Text="📦" FontSize="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <!-- Header: NotebookLM Status & Config -->
+                        <Grid Grid.Row="0" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                                <TextBlock Text="📁" FontSize="14" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="NotebookLM Dropzone" Foreground="#F8FAFC" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
+                                <Border Background="#064E3B" BorderBrush="#10B981" BorderThickness="0.8" CornerRadius="8" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtNotebookStatus" Text="🟢 Đã kết nối NotebookLM" Foreground="#34D399" FontSize="10" FontWeight="SemiBold"/>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- NotebookLM URL Input -->
+                            <Border Grid.Column="1" Background="#0A0F1A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="6,2" Margin="0,0,8,0">
+                                <Grid>
+                                    <TextBlock x:Name="TxtNotebookUrlPlaceholder" Text="Nhập URL NotebookLM (mặc định https://notebooklm.google.com)..." Foreground="#64748B" FontSize="10.5" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                    <TextBox x:Name="InputNotebookUrl" Background="Transparent" Foreground="#38BDF8" BorderThickness="0" FontSize="11" VerticalAlignment="Center"
+                                             TextChanged="InputNotebookUrl_TextChanged"/>
+                                </Grid>
+                            </Border>
+
+                            <Button Grid.Column="2" Style="{StaticResource ActionChipStyle}" Content="💾 Lưu link" Margin="0,0,6,0" Click="BtnSaveNotebookUrl_Click"/>
+                            <Button Grid.Column="3" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Center" Click="BtnCloseToCompact_Click">
+                                <TextBlock Text="✕" FontSize="12"/>
+                            </Button>
+                        </Grid>
+
+                        <!-- File Drop Display Box -->
+                        <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,0,0,6">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="10" Background="#062E24" BorderThickness="1" BorderBrush="#10B981" Margin="0,0,10,0">
+                                    <TextBlock x:Name="TxtFileIcon" Text="📄" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtFileName" Text="Kéo thả file vào đây (PDF, Word, TXT, CSV, Code, Audio...)" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="TxtFileMeta" Text="Chưa có file nào • Thả file để chuẩn bị đưa vào NotebookLM" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0"/>
+                                </StackPanel>
+
+                                <Button x:Name="BtnClearFiles" Grid.Column="2" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Xóa file đã chọn" Visibility="Collapsed" Click="BtnClearFiles_Click">
+                                    <TextBlock Text="✕" FontSize="10" Foreground="#EF4444"/>
+                                </Button>
+                            </Grid>
                         </Border>
 
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock x:Name="TxtFileName" Text="Kéo thả bất kỳ file nào từ Windows vào đây (hoặc chọn bên dưới)" Foreground="#F8FAFC" FontSize="13" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="TxtFileMeta" Text="Hỗ trợ xem trước, sao chép đường dẫn và giải thích code bằng AI" Foreground="#94A3B8" FontSize="11" Margin="0,2,0,0"/>
-                            
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <Button Style="{StaticResource ActionChipStyle}" Content="📎 Chọn File từ máy" Margin="0,0,6,0" Click="BtnBrowseFile_Click"/>
-                                <Button Style="{StaticResource ActionChipStyle}" Content="📂 Mở thư mục" Margin="0,0,6,0" Click="BtnOpenDownloads_Click"/>
-                                <Button Style="{StaticResource ActionChipStyle}" Content="📋 Copy đường dẫn" Margin="0,0,6,0" Click="BtnCopyPath_Click"/>
-                                <Button Style="{StaticResource ActionChipStyle}" Content="💬 Gửi qua Tin nhắn" Click="BtnShareFile_Click"/>
-                            </StackPanel>
+                        <!-- Action Buttons: Send to NotebookLM, Browse, Copy Path -->
+                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource ActionChipStyle}" Content="📎 Chọn File từ máy" Margin="0,0,6,0" Click="BtnBrowseFile_Click"/>
+                            <Button Style="{StaticResource ActionChipStyle}" Content="📂 Mở thư mục" Margin="0,0,6,0" Click="BtnOpenDownloads_Click"/>
+                            <Button Style="{StaticResource ActionChipStyle}" Content="📋 Copy đường dẫn" Margin="0,0,6,0" Click="BtnCopyPath_Click"/>
+                            <Button x:Name="BtnSendToNotebookLM" Style="{StaticResource ActionChipStyle}"
+                                    Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
+                                    Content="🚀 Đưa vào NotebookLM" Click="BtnSendToNotebookLM_Click"/>
                         </StackPanel>
-
-                        <Button Grid.Column="2" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Top" Click="BtnCloseToCompact_Click">
-                            <TextBlock Text="✕" FontSize="12"/>
-                        </Button>
                     </Grid>
 
-                    <!-- 8. PRIVACY TASK (Size: 480x80) -->
-                    <Grid x:Name="ViewPrivacy" Visibility="Collapsed" Margin="18,10">
+                    <!-- 8. LOCK SCREEN TASK (Size: 520x95) -->
+                    <Grid x:Name="ViewLockScreen" Visibility="Collapsed" Margin="18,10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
@@ -759,19 +838,19 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <Border Grid.Column="0" Width="42" Height="42" CornerRadius="21" Background="#3B1219" BorderThickness="1.5" BorderBrush="#F43F5E" Margin="0,0,14,0">
+                        <Border Grid.Column="0" Width="44" Height="44" CornerRadius="22" Background="#4C0A1C" BorderThickness="1.5" BorderBrush="#FB7185" Margin="0,0,14,0">
                             <Border.Effect>
                                 <DropShadowEffect Color="#F43F5E" BlurRadius="16" ShadowDepth="0" Opacity="0.8"/>
                             </Border.Effect>
-                            <TextBlock Text="🛡️" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <TextBlock Text="🔒" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
 
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="Privacy Radar Shield" Foreground="#F8FAFC" FontSize="13.5" FontWeight="Bold"/>
-                            <TextBlock Text="Microphone &amp; Sensors active in background" Foreground="#FB7185" FontSize="11" Margin="0,2,0,0"/>
+                            <TextBlock Text="Khóa màn hình máy tính (Lock Screen)" Foreground="#F8FAFC" FontSize="13.5" FontWeight="Bold"/>
+                            <TextBlock Text="Đưa máy tính về màn hình khóa Windows bảo vệ quyền riêng tư ngay lập tức" Foreground="#FB7185" FontSize="11" Margin="0,2,0,0"/>
                         </StackPanel>
 
-                        <Button Grid.Column="2" Style="{StaticResource DangerButtonStyle}" Content="Block Now" VerticalAlignment="Center" Margin="0,0,10,0" Click="BtnBlockMic_Click"/>
+                        <Button Grid.Column="2" Style="{StaticResource DangerButtonStyle}" Content="🔒 Khóa máy ngay" VerticalAlignment="Center" Margin="0,0,10,0" Click="BtnLockWorkstation_Click"/>
                         <Button Grid.Column="3" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Center" Click="BtnCloseToCompact_Click">
                             <TextBlock Text="✕" FontSize="12"/>
                         </Button>

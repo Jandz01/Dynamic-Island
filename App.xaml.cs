@@ -10,11 +10,21 @@ public partial class App : Application
     {
         AppDomain.CurrentDomain.UnhandledException += (s, args) =>
         {
-            File.WriteAllText(@"D:\Dynamic Island\crash.log", args.ExceptionObject.ToString());
+            try
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "crash.log");
+                File.WriteAllText(logFile, args.ExceptionObject.ToString());
+            }
+            catch { }
         };
         DispatcherUnhandledException += (s, args) =>
         {
-            File.WriteAllText(@"D:\Dynamic Island\crash.log", args.Exception.ToString());
+            try
+            {
+                string logFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "crash.log");
+                File.WriteAllText(logFile, args.Exception.ToString());
+            }
+            catch { }
         };
         base.OnStartup(e);
     }

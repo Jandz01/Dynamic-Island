@@ -24,15 +24,18 @@ namespace DynamicIsland
         Orbital,
         Music,
         Pomodoro,
-        Sysmon,
+        Camera,
         Notification,
         Dropzone,
-        Privacy
+        LockScreen
     }
 
     public partial class MainWindow : Window
     {
         #region Win32 Native Hardware APIs
+        [DllImport("user32.dll")]
+        private static extern bool LockWorkStation();
+
         [StructLayout(LayoutKind.Sequential)]
         private struct MEMORYSTATUSEX
         {
@@ -65,8 +68,6 @@ namespace DynamicIsland
         [DllImport("kernel32.dll")]
         private static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS lpSystemPowerStatus);
 
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern bool GetSystemTimes(out FILETIME lpIdleTime, out FILETIME lpKernelTime, out FILETIME lpUserTime);
         #endregion
 
         // State & Timers
@@ -114,11 +115,6 @@ namespace DynamicIsland
 
         // Dropzone
         private string? _currentFilePath = null;
-
-        // CPU Usage
-        private ulong _lastIdleTime = 0;
-        private ulong _lastKernelTime = 0;
-        private ulong _lastUserTime = 0;
 
         public MainWindow()
         {
@@ -188,9 +184,15 @@ namespace DynamicIsland
                 }).ToList();
             }
 
+            // Initialize NotebookLM configuration
+            LoadNotebookLmConfig();
+
             // Initial view: Compact Notch
             ApplyState(IslandState.Compact, animate: false);
             UpdateNotchGeometry(540, 38, 0, 0);
+
+            // Update Notification UI with loaded notifications
+            UpdateNotificationUI();
 
             // Setup demo incoming notification after 8s using REAL recent notification if available
             var demoNotifyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
@@ -321,17 +323,71 @@ namespace DynamicIsland
             return null;
         }
 
+        #region Drag Grip Handle (Dấu :: Kéo Di Chuyển Dynamic Island)
+        private bool _isDraggingHandle = false;
+        private Point _dragStartScreenPos;
+        private double _dragStartOffset;
+
+        private void DragHandle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _isDraggingHandle = true;
+            _dragStartScreenPos = PointToScreen(e.GetPosition(this));
+            _dragStartOffset = _horizontalOffset;
+            ((UIElement)sender).CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void DragHandle_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (_isDraggingHandle)
+            {
+                Point cur = PointToScreen(e.GetPosition(this));
+                double deltaX = cur.X - _dragStartScreenPos.X;
+                SetHorizontalOffset(_dragStartOffset + deltaX);
+                e.Handled = true;
+            }
+        }
+
+        private void DragHandle_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (_isDraggingHandle)
+            {
+                _isDraggingHandle = false;
+                ((UIElement)sender).ReleaseMouseCapture();
+                e.Handled = true;
+            }
+        }
+
+        private void BtnRecordScreen_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            try
+            {
+                Process.Start(new ProcessStartInfo("ms-screenclip:") { UseShellExecute = true });
+            }
+            catch
+            {
+                try
+                {
+                    Process.Start(new ProcessStartInfo("explorer.exe", "ms-gamebar:") { UseShellExecute = true });
+                }
+                catch { }
+            }
+        }
+        #endregion
+
         private void NotchRoot_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (_currentState == IslandState.Orbital) return;
             if (DateTime.UtcNow < _preventPullDownUntil) return;
 
-            // Do not intercept clicks on buttons, textboxes, or sliders
+            // Do not intercept clicks on buttons, textboxes, sliders, or drag grip handle
             if (e.OriginalSource is DependencyObject dep)
             {
                 if (FindVisualParent<Button>(dep) != null || 
                     FindVisualParent<TextBox>(dep) != null || 
-                    FindVisualParent<Slider>(dep) != null)
+                    FindVisualParent<Slider>(dep) != null ||
+                    FindVisualParent<Border>(dep)?.Name == "DragGripHandle")
                 {
                     return;
                 }
@@ -490,11 +546,6 @@ namespace DynamicIsland
             if (GlobalMemoryStatusEx(ref memStatus))
             {
                 TxtRam.Text = $"{memStatus.dwMemoryLoad}%";
-                TxtSysRam.Text = $"{memStatus.dwMemoryLoad}%";
-
-                double totalGb = memStatus.ullTotalPhys / (1024.0 * 1024.0 * 1024.0);
-                double usedGb = (memStatus.ullTotalPhys - memStatus.ullAvailPhys) / (1024.0 * 1024.0 * 1024.0);
-                TxtSysRamGb.Text = $"{usedGb:F1} GB / {totalGb:F1} GB";
             }
 
             // Real ROM (Drive C)
@@ -519,51 +570,12 @@ namespace DynamicIsland
                 {
                     TxtBattery.Text = $"{powerStatus.BatteryLifePercent}%";
                     TxtBatteryIcon.Text = powerStatus.ACLineStatus == 1 ? "⚡" : "🔋";
-                    TxtSysBattery.Text = $"{powerStatus.BatteryLifePercent}% • Ổ C: {TxtRom.Text}";
                 }
                 else
                 {
                     TxtBattery.Text = "AC";
                     TxtBatteryIcon.Text = "⚡";
-                    TxtSysBattery.Text = $"100% (AC) • Ổ C: {TxtRom.Text}";
                 }
-            }
-
-            // Real CPU
-            UpdateCpuUsage();
-
-            // System Uptime
-            var uptime = TimeSpan.FromMilliseconds(Environment.TickCount64);
-            TxtSysUptime.Text = $"Uptime: {uptime.Days}d {uptime.Hours}h {uptime.Minutes}m";
-        }
-
-        private void UpdateCpuUsage()
-        {
-            if (GetSystemTimes(out FILETIME idleTime, out FILETIME kernelTime, out FILETIME userTime))
-            {
-                ulong idle = ((ulong)idleTime.dwHighDateTime << 32) | (uint)idleTime.dwLowDateTime;
-                ulong kernel = ((ulong)kernelTime.dwHighDateTime << 32) | (uint)kernelTime.dwLowDateTime;
-                ulong user = ((ulong)userTime.dwHighDateTime << 32) | (uint)userTime.dwLowDateTime;
-
-                if (_lastKernelTime != 0 || _lastUserTime != 0)
-                {
-                    ulong usrDiff = user - _lastUserTime;
-                    ulong kerDiff = kernel - _lastKernelTime;
-                    ulong idlDiff = idle - _lastIdleTime;
-
-                    ulong sysTotal = usrDiff + kerDiff;
-                    if (sysTotal > 0)
-                    {
-                        double cpu = ((double)(sysTotal - idlDiff) / sysTotal) * 100.0;
-                        int cpuVal = Math.Clamp((int)cpu, 0, 100);
-                        TxtSysCpu.Text = $"{cpuVal}%";
-                        ProgressSysCpu.Value = cpuVal;
-                    }
-                }
-
-                _lastIdleTime = idle;
-                _lastKernelTime = kernel;
-                _lastUserTime = user;
             }
         }
         #endregion
@@ -803,8 +815,8 @@ namespace DynamicIsland
             double radiusX = 200 * _bloomProgress;
             double radiusY = 100 * _bloomProgress;
 
-            Border[] orbs = [OrbMusic, OrbNotify, OrbPrivacy, OrbDrop, OrbSys, OrbPomodoro];
-            TranslateTransform[] translates = [TransMusic, TransNotify, TransPrivacy, TransDrop, TransSys, TransPomodoro];
+            Border[] orbs = [OrbMusic, OrbNotify, OrbLockScreen, OrbDrop, OrbCamera, OrbPomodoro];
+            TranslateTransform[] translates = [TransMusic, TransNotify, TransLockScreen, TransDrop, TransCamera, TransPomodoro];
 
             for (int i = 0; i < orbs.Length; i++)
             {
@@ -848,9 +860,9 @@ namespace DynamicIsland
                 {
                     "OrbMusic" => LblMusic,
                     "OrbNotify" => LblNotify,
-                    "OrbPrivacy" => LblPrivacy,
+                    "OrbLockScreen" => LblLockScreen,
                     "OrbDrop" => LblDrop,
-                    "OrbSys" => LblSys,
+                    "OrbCamera" => LblCamera,
                     "OrbPomodoro" => LblPomodoro,
                     _ => null
                 };
@@ -887,9 +899,9 @@ namespace DynamicIsland
                 {
                     "OrbMusic" => LblMusic,
                     "OrbNotify" => LblNotify,
-                    "OrbPrivacy" => LblPrivacy,
+                    "OrbLockScreen" => LblLockScreen,
                     "OrbDrop" => LblDrop,
-                    "OrbSys" => LblSys,
+                    "OrbCamera" => LblCamera,
                     "OrbPomodoro" => LblPomodoro,
                     _ => null
                 };
@@ -905,7 +917,7 @@ namespace DynamicIsland
         #region Reverse Teardrop Droplet Flow to Task
         private void TriggerReverseDropletToTask(Border orb, IslandState targetState)
         {
-            Border[] orbs = [OrbMusic, OrbNotify, OrbPrivacy, OrbDrop, OrbSys, OrbPomodoro];
+            Border[] orbs = [OrbMusic, OrbNotify, OrbLockScreen, OrbDrop, OrbCamera, OrbPomodoro];
             int idx = Array.IndexOf(orbs, orb);
             double angle = idx >= 0 ? _orbitAngle + idx * (Math.PI * 2 / orbs.Length) : 0;
             double radiusX = 200 * _bloomProgress;
@@ -1023,7 +1035,54 @@ namespace DynamicIsland
         }
         #endregion
 
-        #region Dropzone File Handling
+        #region Dropzone & NotebookLM Integration
+        private readonly string _notebookLmConfigPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DynamicIsland", "notebooklm_url.txt"
+        );
+
+        private void LoadNotebookLmConfig()
+        {
+            try
+            {
+                if (File.Exists(_notebookLmConfigPath))
+                {
+                    string savedUrl = File.ReadAllText(_notebookLmConfigPath).Trim();
+                    if (!string.IsNullOrEmpty(savedUrl))
+                    {
+                        InputNotebookUrl.Text = savedUrl;
+                        TxtNotebookUrlPlaceholder.Visibility = Visibility.Collapsed;
+                        TxtNotebookStatus.Text = "🟢 Đã kết nối NotebookLM";
+                        return;
+                    }
+                }
+            }
+            catch { }
+            InputNotebookUrl.Text = "https://notebooklm.google.com/";
+            TxtNotebookUrlPlaceholder.Visibility = Visibility.Collapsed;
+        }
+
+        private void BtnSaveNotebookUrl_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(_notebookLmConfigPath)!;
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                File.WriteAllText(_notebookLmConfigPath, InputNotebookUrl.Text.Trim());
+                TxtNotebookStatus.Text = "🟢 Đã lưu link NotebookLM";
+                MessageBox.Show("Đã lưu liên kết NotebookLM thành công!", "NotebookLM Dropzone", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi khi lưu link: " + ex.Message, "Lỗi", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void InputNotebookUrl_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            TxtNotebookUrlPlaceholder.Visibility = string.IsNullOrEmpty(InputNotebookUrl.Text) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
         private void Dropzone_DragOver(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
@@ -1049,8 +1108,8 @@ namespace DynamicIsland
         {
             var ofd = new Microsoft.Win32.OpenFileDialog
             {
-                Title = "Chọn file đưa vào Dynamic Island",
-                Filter = "All Files (*.*)|*.*"
+                Title = "Chọn file đưa vào NotebookLM",
+                Filter = "Tất cả file hỗ trợ (*.*)|*.*|Tài liệu PDF & Office (*.pdf;*.docx;*.txt;*.md)|*.pdf;*.docx;*.txt;*.md|Âm thanh (*.mp3;*.wav)|*.mp3;*.wav"
             };
             if (ofd.ShowDialog() == true)
             {
@@ -1064,15 +1123,18 @@ namespace DynamicIsland
             var fi = new FileInfo(path);
             TxtFileName.Text = fi.Name;
             TxtFileMeta.Text = $"{fi.Length / 1024.0:F1} KB • {fi.Extension.ToUpper()} • Cập nhật: {fi.LastWriteTime:dd/MM/yyyy HH:mm}";
+            BtnClearFiles.Visibility = Visibility.Visible;
 
             string ext = fi.Extension.ToLowerInvariant();
             TxtFileIcon.Text = ext switch
             {
-                ".cs" or ".js" or ".py" or ".cpp" or ".html" or ".css" => "💻",
+                ".cs" or ".js" or ".py" or ".cpp" or ".html" or ".css" or ".json" => "💻",
                 ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" => "🖼️",
                 ".zip" or ".rar" or ".7z" or ".tar" => "📦",
-                ".pdf" or ".doc" or ".docx" or ".txt" => "📄",
-                ".mp3" or ".wav" or ".flac" => "🎵",
+                ".pdf" => "📕",
+                ".doc" or ".docx" => "📘",
+                ".txt" or ".md" => "📝",
+                ".mp3" or ".wav" or ".flac" or ".m4a" => "🎵",
                 ".mp4" or ".mkv" => "🎬",
                 _ => "📁"
             };
@@ -1098,8 +1160,56 @@ namespace DynamicIsland
         private void BtnCopyPath_Click(object sender, RoutedEventArgs e)
         {
             string path = _currentFilePath ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads";
-            Clipboard.SetText(path);
-            MessageBox.Show($"Đã sao chép đường dẫn:\n{path}", "Dynamic Island Dropzone", MessageBoxButton.OK, MessageBoxImage.Information);
+            try
+            {
+                Clipboard.SetText(path);
+                MessageBox.Show($"Đã sao chép đường dẫn:\n{path}", "Dynamic Island Dropzone", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch { }
+        }
+
+        private void BtnSendToNotebookLM_Click(object sender, RoutedEventArgs e)
+        {
+            string url = !string.IsNullOrWhiteSpace(InputNotebookUrl.Text)
+                ? InputNotebookUrl.Text.Trim()
+                : "https://notebooklm.google.com/";
+
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "https://" + url;
+            }
+
+            if (!string.IsNullOrEmpty(_currentFilePath) && File.Exists(_currentFilePath))
+            {
+                try
+                {
+                    var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath };
+                    Clipboard.SetFileDropList(fileDrop);
+                }
+                catch
+                {
+                    try { Clipboard.SetText(_currentFilePath); } catch { }
+                }
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                TxtFileMeta.Text = "✅ Đã mở NotebookLM! Đường dẫn file đã copy sẵn, bạn chỉ cần bấm Upload hoặc Add Sources.";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Không thể mở trình duyệt: " + ex.Message, "NotebookLM", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+
+        private void BtnClearFiles_Click(object sender, RoutedEventArgs e)
+        {
+            _currentFilePath = null;
+            TxtFileName.Text = "Kéo thả file vào đây (PDF, Word, TXT, CSV, Code, Audio...)";
+            TxtFileMeta.Text = "Chưa có file nào • Thả file để chuẩn bị đưa vào NotebookLM";
+            TxtFileIcon.Text = "📄";
+            BtnClearFiles.Visibility = Visibility.Collapsed;
         }
         #endregion
 
@@ -1122,10 +1232,10 @@ namespace DynamicIsland
             ViewCompact.Visibility = Visibility.Collapsed;
             ViewMusic.Visibility = Visibility.Collapsed;
             ViewPomodoro.Visibility = Visibility.Collapsed;
-            ViewSysmon.Visibility = Visibility.Collapsed;
+            ViewCamera.Visibility = Visibility.Collapsed;
             ViewNotification.Visibility = Visibility.Collapsed;
             ViewDropzone.Visibility = Visibility.Collapsed;
-            ViewPrivacy.Visibility = Visibility.Collapsed;
+            ViewLockScreen.Visibility = Visibility.Collapsed;
 
             FrameworkElement targetView = ViewCompact;
 
@@ -1170,31 +1280,31 @@ namespace DynamicIsland
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#EAB308");
                         break;
 
-                    case IslandState.Sysmon:
+                    case IslandState.Camera:
                         targetWidth = 560;
                         targetHeight = 110;
-                        targetView = ViewSysmon;
-                        CardGlow.Color = (Color)ColorConverter.ConvertFromString("#0EA5E9");
+                        targetView = ViewCamera;
+                        CardGlow.Color = (Color)ColorConverter.ConvertFromString("#10B981");
                         break;
 
                     case IslandState.Notification:
                         targetWidth = 620;
-                        targetHeight = 145;
+                        targetHeight = 155;
                         targetView = ViewNotification;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#0284C7");
                         break;
 
                     case IslandState.Dropzone:
-                        targetWidth = 540;
-                        targetHeight = 120;
+                        targetWidth = 640;
+                        targetHeight = 145;
                         targetView = ViewDropzone;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#10B981");
                         break;
 
-                    case IslandState.Privacy:
-                        targetWidth = 480;
-                        targetHeight = 80;
-                        targetView = ViewPrivacy;
+                    case IslandState.LockScreen:
+                        targetWidth = 520;
+                        targetHeight = 95;
+                        targetView = ViewLockScreen;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#F43F5E");
                         break;
                 }
@@ -1286,11 +1396,59 @@ namespace DynamicIsland
         private void OrbMusic_Click(object sender, MouseButtonEventArgs e) => TriggerReverseDropletToTask(OrbMusic, IslandState.Music);
         private void OrbNotify_Click(object sender, MouseButtonEventArgs e) => TriggerReverseDropletToTask(OrbNotify, IslandState.Notification);
         private void OrbPomodoro_Click(object sender, MouseButtonEventArgs e) => TriggerReverseDropletToTask(OrbPomodoro, IslandState.Pomodoro);
-        private void OrbSys_Click(object sender, MouseButtonEventArgs e) => TriggerReverseDropletToTask(OrbSys, IslandState.Sysmon);
         private void OrbDrop_Click(object sender, MouseButtonEventArgs e) => TriggerReverseDropletToTask(OrbDrop, IslandState.Dropzone);
-        private void OrbPrivacy_Click(object sender, MouseButtonEventArgs e) => TriggerReverseDropletToTask(OrbPrivacy, IslandState.Privacy);
 
-        #region Notification & Messaging System (Real Windows & Zalo Integration)
+        private void OrbCamera_Click(object sender, MouseButtonEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("microsoft.windows.camera:") { UseShellExecute = true });
+            }
+            catch { }
+            TriggerReverseDropletToTask(OrbCamera, IslandState.Camera);
+        }
+
+        private void OrbLockScreen_Click(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            LockWorkStation();
+        }
+
+        #region Camera Laptop & Webcam Handlers
+        private void BtnLaunchCamera_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("microsoft.windows.camera:") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Không thể mở ứng dụng Camera: " + ex.Message, "Camera Laptop", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        private void BtnCameraSettings_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("ms-settings:privacy-webcam") { UseShellExecute = true });
+            }
+            catch { }
+        }
+        #endregion
+
+        #region Lock Screen Handlers
+        private void BtnLockWorkstation_Click(object sender, RoutedEventArgs e)
+        {
+            LockWorkStation();
+        }
+        #endregion
+
+        #region Notification & Messaging System (Facebook, Zalo, Realtime Filtering & Dismiss)
+        public enum NotificationFilter { All, Zalo, Facebook }
+        private NotificationFilter _currentFilter = NotificationFilter.All;
+        private int _currentFilteredIndex = 0;
+
         public class DynamicNotification
         {
             public long Id { get; set; }
@@ -1304,6 +1462,143 @@ namespace DynamicIsland
         }
 
         private int _sampleNotifyIndex = 0;
+
+        private List<DynamicNotification> GetFilteredNotifications()
+        {
+            return _currentFilter switch
+            {
+                NotificationFilter.Zalo => _realNotificationsList.Where(n => n.AppName.Equals("Zalo", StringComparison.OrdinalIgnoreCase) || (n.PrimaryId ?? "").Contains("zalo", StringComparison.OrdinalIgnoreCase)).ToList(),
+                NotificationFilter.Facebook => _realNotificationsList.Where(n => n.AppName.Equals("Facebook", StringComparison.OrdinalIgnoreCase) || (n.PrimaryId ?? "").Contains("facebook", StringComparison.OrdinalIgnoreCase)).ToList(),
+                _ => _realNotificationsList
+            };
+        }
+
+        public void UpdateNotificationUI()
+        {
+            // Update filter buttons counter text
+            int allCount = _realNotificationsList.Count;
+            int zaloCount = _realNotificationsList.Count(n => n.AppName.Equals("Zalo", StringComparison.OrdinalIgnoreCase) || (n.PrimaryId ?? "").Contains("zalo", StringComparison.OrdinalIgnoreCase));
+            int fbCount = _realNotificationsList.Count(n => n.AppName.Equals("Facebook", StringComparison.OrdinalIgnoreCase) || (n.PrimaryId ?? "").Contains("facebook", StringComparison.OrdinalIgnoreCase));
+
+            BtnFilterAll.Content = $"Tất cả ({allCount})";
+            BtnFilterZalo.Content = $"💬 Zalo ({zaloCount})";
+            BtnFilterFacebook.Content = $"📘 Facebook ({fbCount})";
+
+            ApplyFilterButtonStyle(BtnFilterAll, _currentFilter == NotificationFilter.All);
+            ApplyFilterButtonStyle(BtnFilterZalo, _currentFilter == NotificationFilter.Zalo);
+            ApplyFilterButtonStyle(BtnFilterFacebook, _currentFilter == NotificationFilter.Facebook);
+
+            var filtered = GetFilteredNotifications();
+            if (filtered.Count == 0)
+            {
+                _currentNotification = null;
+                BorderMsgBubble.Visibility = Visibility.Collapsed;
+                BorderEmptyState.Visibility = Visibility.Visible;
+                GridReplyBar.Visibility = Visibility.Collapsed;
+                TxtNotifySender.Text = "Đã xem hết";
+                TxtAppTag.Text = _currentFilter == NotificationFilter.Zalo ? "Zalo" : _currentFilter == NotificationFilter.Facebook ? "Facebook" : "Hệ thống";
+                TxtNotifyTime.Text = "Không còn thông báo chờ";
+                TxtNotifCounter.Text = "0/0";
+                return;
+            }
+
+            BorderMsgBubble.Visibility = Visibility.Visible;
+            BorderEmptyState.Visibility = Visibility.Collapsed;
+            GridReplyBar.Visibility = Visibility.Visible;
+
+            _currentFilteredIndex = Math.Clamp(_currentFilteredIndex, 0, filtered.Count - 1);
+            var notif = filtered[_currentFilteredIndex];
+            _currentNotification = notif;
+
+            try
+            {
+                BadgeAppIcon.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(notif.AppColor));
+                BadgeAppGlow.Color = (Color)ColorConverter.ConvertFromString(notif.AppColor);
+            }
+            catch
+            {
+                BadgeAppIcon.Background = new SolidColorBrush(Color.FromRgb(2, 132, 199));
+            }
+
+            TxtAppIcon.Text = notif.AppIcon;
+            TxtAppTag.Text = notif.AppName;
+            TxtNotifySender.Text = notif.Sender;
+            TxtNotifyTime.Text = $"{notif.Time} • Thời gian thực";
+            TxtNotifyContent.Text = notif.Message;
+            TxtNotifCounter.Text = $"{_currentFilteredIndex + 1}/{filtered.Count}";
+            InputReply.Text = "";
+        }
+
+        private void ApplyFilterButtonStyle(Button btn, bool isActive)
+        {
+            if (isActive)
+            {
+                btn.Background = new SolidColorBrush(Color.FromRgb(2, 132, 199));
+                btn.BorderBrush = new SolidColorBrush(Color.FromRgb(56, 189, 248));
+                btn.Foreground = Brushes.White;
+            }
+            else
+            {
+                btn.Background = new SolidColorBrush(Color.FromRgb(26, 31, 44));
+                btn.BorderBrush = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+                btn.Foreground = new SolidColorBrush(Color.FromRgb(241, 245, 249));
+            }
+        }
+
+        private void BtnFilterAll_Click(object sender, RoutedEventArgs e)
+        {
+            _currentFilter = NotificationFilter.All;
+            _currentFilteredIndex = 0;
+            UpdateNotificationUI();
+        }
+
+        private void BtnFilterZalo_Click(object sender, RoutedEventArgs e)
+        {
+            _currentFilter = NotificationFilter.Zalo;
+            _currentFilteredIndex = 0;
+            UpdateNotificationUI();
+        }
+
+        private void BtnFilterFacebook_Click(object sender, RoutedEventArgs e)
+        {
+            _currentFilter = NotificationFilter.Facebook;
+            _currentFilteredIndex = 0;
+            UpdateNotificationUI();
+        }
+
+        private void BtnDeleteNotification_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentNotification != null)
+            {
+                _realNotificationsList.Remove(_currentNotification);
+                var filtered = GetFilteredNotifications();
+                if (_currentFilteredIndex >= filtered.Count)
+                {
+                    _currentFilteredIndex = Math.Max(0, filtered.Count - 1);
+                }
+                UpdateNotificationUI();
+            }
+        }
+
+        private void BtnPrevNotif_Click(object sender, RoutedEventArgs e)
+        {
+            var filtered = GetFilteredNotifications();
+            if (filtered.Count > 0)
+            {
+                _currentFilteredIndex = (_currentFilteredIndex - 1 + filtered.Count) % filtered.Count;
+                UpdateNotificationUI();
+            }
+        }
+
+        private void BtnNextNotif_Click(object sender, RoutedEventArgs e)
+        {
+            var filtered = GetFilteredNotifications();
+            if (filtered.Count > 0)
+            {
+                _currentFilteredIndex = (_currentFilteredIndex + 1) % filtered.Count;
+                UpdateNotificationUI();
+            }
+        }
 
         private void OnRealNotificationReceived(RealNotification r)
         {
@@ -1322,51 +1617,76 @@ namespace DynamicIsland
                 };
 
                 _realNotificationsList.Insert(0, notif);
-                ShowNotification(notif);
+
+                // If currently filtered by specific app, match filter
+                if (_currentFilter == NotificationFilter.Zalo && !notif.AppName.Equals("Zalo", StringComparison.OrdinalIgnoreCase))
+                {
+                    _currentFilter = NotificationFilter.All;
+                }
+                else if (_currentFilter == NotificationFilter.Facebook && !notif.AppName.Equals("Facebook", StringComparison.OrdinalIgnoreCase))
+                {
+                    _currentFilter = NotificationFilter.All;
+                }
+
+                _currentFilteredIndex = 0;
+                UpdateNotificationUI();
+
+                if (_currentState == IslandState.Compact || _currentState == IslandState.Mini)
+                {
+                    SwitchState(IslandState.Notification);
+                }
             });
         }
 
         public void ShowNotification(DynamicNotification notif)
         {
-            try
+            if (!_realNotificationsList.Contains(notif))
             {
-                _currentNotification = notif;
-                BadgeAppIcon.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(notif.AppColor));
-                BadgeAppGlow.Color = (Color)ColorConverter.ConvertFromString(notif.AppColor);
-                TxtAppIcon.Text = notif.AppIcon;
-                TxtAppTag.Text = notif.AppName;
-                TxtNotifySender.Text = notif.Sender;
-                TxtNotifyTime.Text = $"{notif.Time} • Tin nhắn thực";
-                TxtNotifyContent.Text = notif.Message;
-                InputReply.Text = "";
-
-                // Auto-popup notification on Dynamic Island!
-                SwitchState(IslandState.Notification);
+                _realNotificationsList.Insert(0, notif);
             }
-            catch { }
+            _currentFilteredIndex = 0;
+            UpdateNotificationUI();
+            SwitchState(IslandState.Notification);
         }
 
         private void BtnSimulateMsg_Click(object sender, RoutedEventArgs e)
         {
-            if (_realNotificationsList.Count > 0)
+            _sampleNotifyIndex++;
+            DynamicNotification sampleNotif;
+
+            if (_sampleNotifyIndex % 2 == 1)
             {
-                var notif = _realNotificationsList[_sampleNotifyIndex % _realNotificationsList.Count];
-                _sampleNotifyIndex++;
-                ShowNotification(notif);
+                // Sample Facebook notification
+                sampleNotif = new DynamicNotification
+                {
+                    AppName = "Facebook",
+                    AppIcon = "📘",
+                    AppColor = "#1877F2",
+                    Sender = "Facebook • Nguyễn Hoàng",
+                    Message = "Đã nhắc đến bạn trong một bình luận: 'Alo bạn xem bài viết mới này hay quá nè!'",
+                    Time = DateTime.Now.ToString("HH:mm"),
+                    PrimaryId = "facebook"
+                };
             }
             else
             {
-                ShowNotification(new DynamicNotification
+                // Sample Zalo notification
+                sampleNotif = new DynamicNotification
                 {
                     AppName = "Zalo",
                     AppIcon = "💬",
                     AppColor = "#0068FF",
-                    Sender = "Zalo Desktop",
-                    Message = "Đang kết nối nhận thông báo thực từ hệ thống Windows & Zalo...",
-                    Time = "Vừa xong",
+                    Sender = "Zalo • Trần Hải Đăng",
+                    Message = "Alo bạn ơi! Tài liệu thiết kế dự án đã hoàn thiện rồi nhé, bạn xem qua rồi phản hồi mình nha!",
+                    Time = DateTime.Now.ToString("HH:mm"),
                     PrimaryId = "com.vng.zalo"
-                });
+                };
             }
+
+            _realNotificationsList.Insert(0, sampleNotif);
+            _currentFilteredIndex = 0;
+            UpdateNotificationUI();
+            SwitchState(IslandState.Notification);
         }
 
         private void InputReply_TextChanged(object sender, TextChangedEventArgs e)
@@ -1397,7 +1717,7 @@ namespace DynamicIsland
             }
             catch { }
 
-            // Bring application window (e.g. Zalo, Telegram) to front!
+            // Bring application window (e.g. Zalo, Telegram, Facebook) to front!
             RealNotificationService.FocusApp(_currentNotification?.PrimaryId);
 
             // Visual feedback
@@ -1444,12 +1764,6 @@ namespace DynamicIsland
             InputReply.Focus();
         }
         #endregion
-
-        private void BtnBlockMic_Click(object sender, RoutedEventArgs e)
-        {
-            MessageBox.Show("🔒 Bảo vệ quyền riêng tư:\nĐã ngắt quyền truy cập Microphone và cảm biến!", "Dynamic Shield", MessageBoxButton.OK, MessageBoxImage.Information);
-            SwitchState(IslandState.Compact);
-        }
         #endregion
     }
 }
