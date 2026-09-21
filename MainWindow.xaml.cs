@@ -68,6 +68,38 @@ namespace DynamicIsland
         [DllImport("kernel32.dll")]
         private static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS lpSystemPowerStatus);
 
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern int GetWindowTextLength(IntPtr hWnd);
+
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+        private const int SW_RESTORE = 9;
+        private const byte VK_CONTROL = 0x11;
+        private const byte VK_V = 0x56;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
+
         #endregion
 
         // State & Timers
@@ -115,6 +147,7 @@ namespace DynamicIsland
 
         // Dropzone
         private string? _currentFilePath = null;
+        private string _notebookName = "";
 
         public MainWindow()
         {
@@ -1118,25 +1151,218 @@ namespace DynamicIsland
             return host.Contains("notebooklm") || (host.Contains("google.com") && uriResult.AbsolutePath.Contains("notebook"));
         }
 
-        private void UpdateNotebookLmStatus(bool isValid, string url)
+        private void UpdateNotebookLmStatus(bool isValid, string url, string notebookName = "", bool isWindowLive = false)
         {
             Dispatcher.Invoke(() =>
             {
-                if (isValid)
+                if (isValid || isWindowLive)
                 {
                     BorderNotebookStatus.Background = (Brush)new BrushConverter().ConvertFromString("#064E3B")!;
                     BorderNotebookStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
                     TxtNotebookStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#34D399")!;
-                    TxtNotebookStatus.Text = url.Contains("/notebook/") ? "🟢 Đã kết nối Sổ tay NotebookLM" : "🟢 Đã kết nối NotebookLM";
+                    if (!string.IsNullOrWhiteSpace(notebookName))
+                    {
+                        TxtNotebookStatus.Text = isWindowLive 
+                            ? $"🟢 Đang mở: {notebookName}" 
+                            : $"🟢 Sổ tay: {notebookName}";
+                    }
+                    else if (url.Contains("/notebook/"))
+                    {
+                        TxtNotebookStatus.Text = "🟢 Đã kết nối Sổ tay NotebookLM";
+                    }
+                    else
+                    {
+                        TxtNotebookStatus.Text = "🟢 Đã kết nối NotebookLM";
+                    }
                 }
                 else
                 {
                     BorderNotebookStatus.Background = (Brush)new BrushConverter().ConvertFromString("#291F03")!;
                     BorderNotebookStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#EAB308")!;
                     TxtNotebookStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#FDE047")!;
-                    TxtNotebookStatus.Text = "🟡 Chưa liên kết (Nhập URL NotebookLM)";
+                    TxtNotebookStatus.Text = "🟡 Chưa liên kết (Nhập URL hoặc mở NotebookLM)";
                 }
             });
+        }
+
+        private IntPtr FindNotebookLmWindow(out string detectedTitle)
+        {
+            IntPtr bestHwnd = IntPtr.Zero;
+            string bestTitle = "";
+            IntPtr myHwnd = IntPtr.Zero;
+            try
+            {
+                myHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            }
+            catch { }
+
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (hWnd == myHwnd) return true;
+                if (!IsWindowVisible(hWnd)) return true;
+
+                int length = GetWindowTextLength(hWnd);
+                if (length == 0) return true;
+
+                var builder = new System.Text.StringBuilder(length + 1);
+                GetWindowText(hWnd, builder, builder.Capacity);
+                string title = builder.ToString();
+
+                if (title.Contains("NotebookLM", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Prioritize specific notebook titles over generic home titles
+                    if (title.Contains("- NotebookLM", StringComparison.OrdinalIgnoreCase) || title.Contains("- Google NotebookLM", StringComparison.OrdinalIgnoreCase))
+                    {
+                        bestHwnd = hWnd;
+                        bestTitle = title;
+                        return false; // Found specific notebook window!
+                    }
+
+                    if (bestHwnd == IntPtr.Zero)
+                    {
+                        bestHwnd = hWnd;
+                        bestTitle = title;
+                    }
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            detectedTitle = bestTitle;
+            return bestHwnd;
+        }
+
+        private string ExtractNotebookName(string windowTitle, string url)
+        {
+            if (!string.IsNullOrWhiteSpace(windowTitle))
+            {
+                string clean = windowTitle;
+                string[] browserSuffixes = {
+                    " - Google Chrome",
+                    " - Microsoft​ Edge",
+                    " - Microsoft Edge",
+                    " - Brave",
+                    " - Mozilla Firefox",
+                    " - Firefox",
+                    " - Opera",
+                    " - Vivaldi"
+                };
+                foreach (var suffix in browserSuffixes)
+                {
+                    int sIdx = clean.IndexOf(suffix, StringComparison.OrdinalIgnoreCase);
+                    if (sIdx >= 0)
+                    {
+                        clean = clean.Substring(0, sIdx).Trim();
+                    }
+                }
+
+                int nIdx = clean.IndexOf("- NotebookLM", StringComparison.OrdinalIgnoreCase);
+                if (nIdx > 0)
+                {
+                    string name = clean.Substring(0, nIdx).Trim();
+                    if (!string.IsNullOrWhiteSpace(name)) return name;
+                }
+
+                int gIdx = clean.IndexOf("- Google NotebookLM", StringComparison.OrdinalIgnoreCase);
+                if (gIdx > 0)
+                {
+                    string name = clean.Substring(0, gIdx).Trim();
+                    if (!string.IsNullOrWhiteSpace(name)) return name;
+                }
+
+                if (!clean.Equals("NotebookLM", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Equals("Google NotebookLM", StringComparison.OrdinalIgnoreCase))
+                {
+                    return clean;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(url) && url.Contains("/notebook/"))
+            {
+                try
+                {
+                    string fullUrl = url.StartsWith("http") ? url : "https://" + url;
+                    if (Uri.TryCreate(fullUrl, UriKind.Absolute, out Uri? uri))
+                    {
+                        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                        for (int i = 0; i < segments.Length; i++)
+                        {
+                            if (segments[i].Equals("notebook", StringComparison.OrdinalIgnoreCase) && i + 1 < segments.Length)
+                            {
+                                string id = segments[i + 1];
+                                string shortId = id.Length > 8 ? id.Substring(0, 8) : id;
+                                return $"Sổ tay #{shortId}";
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return "";
+        }
+
+        private async Task DetectAndRefreshNotebookAsync(bool showToast = false)
+        {
+            // Spin animation for Refresh button icon
+            try
+            {
+                var spinAnim = new DoubleAnimation(0, 360, TimeSpan.FromMilliseconds(450))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                RefreshSpinRotate.BeginAnimation(RotateTransform.AngleProperty, spinAnim);
+            }
+            catch { }
+
+            string url = InputNotebookUrl.Text.Trim();
+            IntPtr hWnd = FindNotebookLmWindow(out string windowTitle);
+
+            string detected = ExtractNotebookName(windowTitle, url);
+            if (!string.IsNullOrWhiteSpace(detected))
+            {
+                _notebookName = detected;
+                TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
+            }
+            else if (!string.IsNullOrWhiteSpace(_notebookName))
+            {
+                TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
+            }
+            else
+            {
+                TxtNotebookHeaderTitle.Text = "NotebookLM";
+            }
+
+            bool hasWindow = hWnd != IntPtr.Zero;
+            bool validUrl = IsValidNotebookLmUrl(url);
+
+            UpdateNotebookLmStatus(validUrl || hasWindow, url, _notebookName, hasWindow);
+            SaveNotebookLmConfig(url, _notebookName);
+
+            if (showToast)
+            {
+                if (hasWindow && !string.IsNullOrWhiteSpace(_notebookName))
+                {
+                    ShowModernToast($"Đã nhận diện Sổ tay: '{_notebookName}' (Tab đang mở)", "🎯", "#10B981");
+                }
+                else if (hasWindow)
+                {
+                    ShowModernToast("Đã kết nối với cửa sổ NotebookLM trên trình duyệt!", "🟢", "#10B981");
+                }
+                else if (validUrl)
+                {
+                    ShowModernToast("Đã kết nối URL NotebookLM (Sẵn sàng nhận tệp)", "🟢", "#10B981");
+                }
+                else
+                {
+                    ShowModernToast("Chưa thấy tab NotebookLM. Hãy mở Sổ tay trên trình duyệt!", "ℹ️", "#38BDF8");
+                }
+            }
+            await Task.CompletedTask;
+        }
+
+        private async void BtnRefreshNotebook_Click(object sender, RoutedEventArgs e)
+        {
+            await DetectAndRefreshNotebookAsync(showToast: true);
         }
 
         private void LoadNotebookLmConfig()
@@ -1145,13 +1371,27 @@ namespace DynamicIsland
             {
                 if (File.Exists(_notebookLmConfigPath))
                 {
-                    string savedUrl = File.ReadAllText(_notebookLmConfigPath).Trim();
-                    if (!string.IsNullOrEmpty(savedUrl))
+                    string content = File.ReadAllText(_notebookLmConfigPath).Trim();
+                    if (!string.IsNullOrEmpty(content))
                     {
+                        string savedUrl = content;
+                        string savedName = "";
+                        if (content.Contains('|'))
+                        {
+                            var parts = content.Split('|', 2);
+                            savedUrl = parts[0].Trim();
+                            savedName = parts[1].Trim();
+                        }
+
                         InputNotebookUrl.Text = savedUrl;
-                        TxtNotebookUrlPlaceholder.Visibility = Visibility.Collapsed;
+                        TxtNotebookUrlPlaceholder.Visibility = string.IsNullOrEmpty(savedUrl) ? Visibility.Visible : Visibility.Collapsed;
+                        _notebookName = savedName;
+                        if (!string.IsNullOrWhiteSpace(_notebookName))
+                        {
+                            TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
+                        }
                         bool valid = IsValidNotebookLmUrl(savedUrl);
-                        UpdateNotebookLmStatus(valid, savedUrl);
+                        UpdateNotebookLmStatus(valid, savedUrl, _notebookName, false);
                         return;
                     }
                 }
@@ -1160,7 +1400,18 @@ namespace DynamicIsland
 
             InputNotebookUrl.Text = "https://notebooklm.google.com/";
             TxtNotebookUrlPlaceholder.Visibility = Visibility.Collapsed;
-            UpdateNotebookLmStatus(true, InputNotebookUrl.Text);
+            UpdateNotebookLmStatus(true, InputNotebookUrl.Text, "", false);
+        }
+
+        private void SaveNotebookLmConfig(string url, string name)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(_notebookLmConfigPath)!;
+                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                File.WriteAllText(_notebookLmConfigPath, $"{url}|{name}");
+            }
+            catch { }
         }
 
         private void BtnSaveNotebookUrl_Click(object sender, RoutedEventArgs e)
@@ -1168,22 +1419,19 @@ namespace DynamicIsland
             string text = InputNotebookUrl.Text.Trim();
             if (IsValidNotebookLmUrl(text))
             {
-                try
+                string detected = ExtractNotebookName("", text);
+                if (!string.IsNullOrWhiteSpace(detected))
                 {
-                    string dir = Path.GetDirectoryName(_notebookLmConfigPath)!;
-                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                    File.WriteAllText(_notebookLmConfigPath, text);
-                    UpdateNotebookLmStatus(true, text);
-                    ShowModernToast("Đã lưu và kết nối NotebookLM thành công!", "🟢", "#10B981");
+                    _notebookName = detected;
+                    TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
                 }
-                catch (Exception ex)
-                {
-                    ShowModernToast("Lỗi khi lưu link: " + ex.Message, "⚠️", "#EF4444");
-                }
+                SaveNotebookLmConfig(text, _notebookName);
+                UpdateNotebookLmStatus(true, text, _notebookName, false);
+                ShowModernToast("Đã lưu và kết nối NotebookLM thành công!", "🟢", "#10B981");
             }
             else
             {
-                UpdateNotebookLmStatus(false, text);
+                UpdateNotebookLmStatus(false, text, "", false);
                 ShowModernToast("Vui lòng nhập đúng định dạng link NotebookLM (notebooklm.google.com/...)!", "⚠️", "#F59E0B");
             }
         }
@@ -1194,17 +1442,17 @@ namespace DynamicIsland
             TxtNotebookUrlPlaceholder.Visibility = string.IsNullOrEmpty(text) ? Visibility.Visible : Visibility.Collapsed;
 
             bool isValid = IsValidNotebookLmUrl(text);
-            UpdateNotebookLmStatus(isValid, text);
+            string detected = ExtractNotebookName("", text);
+            if (!string.IsNullOrWhiteSpace(detected))
+            {
+                _notebookName = detected;
+                TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
+            }
+            UpdateNotebookLmStatus(isValid, text, _notebookName, false);
 
             if (isValid)
             {
-                try
-                {
-                    string dir = Path.GetDirectoryName(_notebookLmConfigPath)!;
-                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                    File.WriteAllText(_notebookLmConfigPath, text);
-                }
-                catch { }
+                SaveNotebookLmConfig(text, _notebookName);
             }
         }
 
@@ -1299,8 +1547,14 @@ namespace DynamicIsland
             catch { }
         }
 
-        private void BtnSendToNotebookLM_Click(object sender, RoutedEventArgs e)
+        private async void BtnSendToNotebookLM_Click(object sender, RoutedEventArgs e)
         {
+            if (string.IsNullOrEmpty(_currentFilePath) || !File.Exists(_currentFilePath))
+            {
+                ShowModernToast("Vui lòng kéo thả hoặc chọn file trước khi gửi vào NotebookLM!", "⚠️", "#F59E0B");
+                return;
+            }
+
             string url = !string.IsNullOrWhiteSpace(InputNotebookUrl.Text)
                 ? InputNotebookUrl.Text.Trim()
                 : "https://notebooklm.google.com/";
@@ -1310,28 +1564,115 @@ namespace DynamicIsland
                 url = "https://" + url;
             }
 
-            if (!string.IsNullOrEmpty(_currentFilePath) && File.Exists(_currentFilePath))
+            // Put file and text contents into clipboard for seamless NotebookLM ingestion
+            try
+            {
+                var dataObject = new DataObject();
+                var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath };
+                dataObject.SetFileDropList(fileDrop);
+
+                var fi = new FileInfo(_currentFilePath);
+                string ext = fi.Extension.ToLowerInvariant();
+                if (ext == ".txt" || ext == ".md" || ext == ".csv" || ext == ".json" || ext == ".cs" || ext == ".py" || ext == ".js" || ext == ".html" || ext == ".xml")
+                {
+                    if (fi.Length <= 2 * 1024 * 1024)
+                    {
+                        string text = File.ReadAllText(_currentFilePath);
+                        dataObject.SetText(text);
+                    }
+                }
+                Clipboard.SetDataObject(dataObject, true);
+            }
+            catch
             {
                 try
                 {
                     var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath };
                     Clipboard.SetFileDropList(fileDrop);
                 }
-                catch
-                {
-                    try { Clipboard.SetText(_currentFilePath); } catch { }
-                }
+                catch { }
             }
 
-            try
+            string fileName = Path.GetFileName(_currentFilePath);
+            IntPtr hWnd = FindNotebookLmWindow(out string windowTitle);
+
+            if (hWnd != IntPtr.Zero)
             {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                TxtFileMeta.Text = "✅ Đã mở NotebookLM! Đường dẫn file đã copy sẵn trong Clipboard.";
-                ShowModernToast("Đang mở Google NotebookLM...", "🚀", "#38BDF8");
+                // CASE 1: Tab/Window is ALREADY open!
+                // Directly focus it and paste without opening any new browser tab
+                string detected = ExtractNotebookName(windowTitle, url);
+                if (!string.IsNullOrWhiteSpace(detected))
+                {
+                    _notebookName = detected;
+                    TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
+                }
+                string targetTitle = !string.IsNullOrWhiteSpace(_notebookName) ? _notebookName : "Sổ tay NotebookLM";
+
+                ShowWindow(hWnd, SW_RESTORE);
+                SetForegroundWindow(hWnd);
+
+                TxtFileMeta.Text = $"⚡ Đang thêm trực tiếp '{fileName}' vào {targetTitle}...";
+                ShowModernToast($"Đang tự động thêm '{fileName}' vào {targetTitle}...", "⚡", "#10B981");
+
+                await Task.Delay(260);
+                keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
+                keybd_event(VK_V, 0, 0, UIntPtr.Zero);
+                keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+                TxtFileMeta.Text = $"✅ Đã gửi thẳng '{fileName}' vào {targetTitle}! (Không mở thêm tab)";
+                ShowModernToast($"Đã thêm thẳng '{fileName}' vào {targetTitle}!", "✅", "#10B981");
             }
-            catch (Exception ex)
+            else
             {
-                ShowModernToast("Không thể mở trình duyệt: " + ex.Message, "⚠️", "#EF4444");
+                // CASE 2: No NotebookLM window open yet
+                // Open notebook URL once and auto-paste when ready
+                TxtFileMeta.Text = $"🚀 Đang mở NotebookLM và chuẩn bị thêm '{fileName}'...";
+                ShowModernToast($"Đang mở NotebookLM và thêm '{fileName}'...", "🚀", "#38BDF8");
+
+                try
+                {
+                    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    ShowModernToast("Không thể mở trình duyệt: " + ex.Message, "⚠️", "#EF4444");
+                    return;
+                }
+
+                _ = Task.Run(async () =>
+                {
+                    for (int i = 0; i < 18; i++)
+                    {
+                        await Task.Delay(300);
+                        IntPtr newHwnd = FindNotebookLmWindow(out string newTitle);
+                        if (newHwnd != IntPtr.Zero)
+                        {
+                            await Task.Delay(1000);
+                            ShowWindow(newHwnd, SW_RESTORE);
+                            SetForegroundWindow(newHwnd);
+                            await Task.Delay(300);
+
+                            keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
+                            keybd_event(VK_V, 0, 0, UIntPtr.Zero);
+                            keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
+                            Dispatcher.Invoke(() =>
+                            {
+                                string detected = ExtractNotebookName(newTitle, url);
+                                if (!string.IsNullOrWhiteSpace(detected))
+                                {
+                                    _notebookName = detected;
+                                    TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
+                                }
+                                TxtFileMeta.Text = $"✅ Đã thêm '{fileName}' vào NotebookLM thành công!";
+                                ShowModernToast($"Đã tự động thêm '{fileName}' vào NotebookLM!", "✅", "#10B981");
+                            });
+                            break;
+                        }
+                    }
+                });
             }
         }
 
@@ -1489,6 +1830,7 @@ namespace DynamicIsland
                         targetHeight = 145;
                         targetView = ViewDropzone;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#10B981");
+                        _ = DetectAndRefreshNotebookAsync(showToast: false);
                         break;
 
                     case IslandState.LockScreen:
