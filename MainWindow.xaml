@@ -811,8 +811,6 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
                             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
@@ -827,35 +825,37 @@
 
                                 <TextBlock Text="📁" FontSize="14" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock x:Name="TxtNotebookHeaderTitle" Text="NotebookLM" Foreground="#F8FAFC" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
-                                <Border x:Name="BorderNotebookStatus" Background="#291219" BorderBrush="#E11D48" BorderThickness="0.8" CornerRadius="8" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtNotebookStatus" Text="🔴 Chưa xác thực Sổ tay" Foreground="#FDA4AF" FontSize="10" FontWeight="SemiBold"/>
+                                <Border x:Name="BorderNotebookStatus" Background="#291219" BorderBrush="#E11D48" BorderThickness="0.8" CornerRadius="8" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                        Cursor="Hand" ToolTip="Nhấp vào đây để mở bảng dán / đổi liên kết Sổ tay NotebookLM"
+                                        MouseLeftButtonDown="BorderNotebookStatus_Click">
+                                    <TextBlock x:Name="TxtNotebookStatus" Text="🔴 Chưa xác thực Sổ tay (Bấm để cài)" Foreground="#FDA4AF" FontSize="10.5" FontWeight="SemiBold"/>
                                 </Border>
                             </StackPanel>
 
-                            <!-- NotebookLM URL Input -->
-                            <Border Grid.Column="1" Background="#0A0F1A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="8" Padding="6,2" Margin="0,0,6,0">
-                                <Grid>
-                                    <TextBlock x:Name="TxtNotebookUrlPlaceholder" Text="Nhập link Sổ tay thật (https://notebooklm.google.com/notebook/[id])..." Foreground="#64748B" FontSize="10.5" VerticalAlignment="Center" IsHitTestVisible="False"/>
-                                    <TextBox x:Name="InputNotebookUrl" Background="Transparent" Foreground="#38BDF8" BorderThickness="0" FontSize="11" VerticalAlignment="Center"
-                                             TextChanged="InputNotebookUrl_TextChanged"/>
-                                </Grid>
-                            </Border>
+                            <!-- Hidden backing input box for backward compatibility -->
+                            <TextBox x:Name="InputNotebookUrl" Visibility="Collapsed" TextChanged="InputNotebookUrl_TextChanged"/>
 
-                            <!-- Refresh Connection & Notebook Name Button -->
-                            <Button x:Name="BtnRefreshNotebook" Grid.Column="2" Style="{StaticResource CircleIconBtn}" Width="24" Height="24"
-                                    ToolTip="Làm mới kết nối &amp; Quét lại tên Sổ tay NotebookLM từ trình duyệt" Margin="0,0,5,0"
-                                    Click="BtnRefreshNotebook_Click">
-                                <TextBlock x:Name="TxtRefreshSpin" Text="🔄" FontSize="11" RenderTransformOrigin="0.5,0.5">
-                                    <TextBlock.RenderTransform>
-                                        <RotateTransform x:Name="RefreshSpinRotate" Angle="0"/>
-                                    </TextBlock.RenderTransform>
-                                </TextBlock>
-                            </Button>
+                            <!-- Quick Paste / Configure & Refresh & Close -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button x:Name="BtnQuickPasteNotebook" Style="{StaticResource ActionChipStyle}" 
+                                        Background="#0F2B3E" BorderBrush="#38BDF8" Foreground="#38BDF8"
+                                        Content="🔗 Dán / Đổi Link Sổ tay" ToolTip="Dán trực tiếp link NotebookLM từ Clipboard hoặc mở bảng cài đặt Sổ tay" 
+                                        Margin="0,0,6,0" Padding="8,3" Click="BtnQuickPasteNotebook_Click"/>
 
-                            <Button Grid.Column="3" Style="{StaticResource ActionChipStyle}" Content="💾 Lưu link" Margin="0,0,6,0" Click="BtnSaveNotebookUrl_Click"/>
-                            <Button Grid.Column="4" Style="{StaticResource CircleIconBtn}" VerticalAlignment="Center" Click="BtnCloseToCompact_Click">
-                                <TextBlock Text="✕" FontSize="12"/>
-                            </Button>
+                                <Button x:Name="BtnRefreshNotebook" Style="{StaticResource CircleIconBtn}" Width="24" Height="24"
+                                        ToolTip="Làm mới kết nối &amp; Quét lại tên Sổ tay NotebookLM từ trình duyệt" Margin="0,0,5,0"
+                                        Click="BtnRefreshNotebook_Click">
+                                    <TextBlock x:Name="TxtRefreshSpin" Text="🔄" FontSize="11" RenderTransformOrigin="0.5,0.5">
+                                        <TextBlock.RenderTransform>
+                                            <RotateTransform x:Name="RefreshSpinRotate" Angle="0"/>
+                                        </TextBlock.RenderTransform>
+                                    </TextBlock>
+                                </Button>
+
+                                <Button Style="{StaticResource CircleIconBtn}" VerticalAlignment="Center" Click="BtnCloseToCompact_Click">
+                                    <TextBlock Text="✕" FontSize="12"/>
+                                </Button>
+                            </StackPanel>
                         </Grid>
 
                         <!-- Staged Source Display Box (Files OR Web Links) -->
@@ -872,8 +872,8 @@
                                 </Border>
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtFileName" Text="Kéo thả tệp hoặc bấm 'Dán Link nguồn' (Web, YouTube, Tài liệu...)" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock x:Name="TxtFileMeta" Text="Chưa có nguồn nào • Thả tệp hoặc dán liên kết để chuẩn bị đưa vào Sổ tay" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0"/>
+                                    <TextBlock x:Name="TxtFileName" Text="Kéo thả tệp hoặc bấm 'Dán Link Web / YouTube' (để nạp nguồn)" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="TxtFileMeta" Text="Chưa có nguồn nào • Thả tệp hoặc dán link tài liệu để nạp vào Sổ tay" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0"/>
                                 </StackPanel>
 
                                 <Button x:Name="BtnClearFiles" Grid.Column="2" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Xóa nguồn đã chọn" Visibility="Collapsed" Click="BtnClearFiles_Click">
@@ -885,8 +885,9 @@
                         <!-- Action Buttons: Send to NotebookLM, Browse, Paste Link -->
                         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
                             <Button Style="{StaticResource ActionChipStyle}" Content="📎 Chọn Tệp từ máy" Margin="0,0,6,0" Click="BtnBrowseFile_Click"/>
-                            <Button x:Name="BtnPasteSourceLink" Style="{StaticResource ActionChipStyle}" Content="🔗 Dán Link nguồn" ToolTip="Dán đường dẫn YouTube, Trang web hoặc Tài liệu online để làm nguồn NotebookLM" Margin="0,0,6,0" Click="BtnPasteSourceLink_Click"/>
-                            <Button Style="{StaticResource ActionChipStyle}" Content="📂 Mở thư mục" Margin="0,0,6,0" Click="BtnOpenDownloads_Click"/>
+                            <Button x:Name="BtnPasteSourceLink" Style="{StaticResource ActionChipStyle}" Content="🌐 Dán Link Web / YouTube" ToolTip="Dán đường dẫn YouTube, Trang web hoặc Docs online để làm nguồn nạp vào NotebookLM" Margin="0,0,6,0" Click="BtnPasteSourceLink_Click"/>
+                            <Button Style="{StaticResource ActionChipStyle}" Content="⚙️ Cài đặt Sổ tay" Margin="0,0,6,0" Click="BtnOpenNotebookConfig_Click"/>
+                            <Button Style="{StaticResource ActionChipStyle}" Content="📂 Thư mục Downloads" Margin="0,0,6,0" Click="BtnOpenDownloads_Click"/>
                             <Button x:Name="BtnSendToNotebookLM" Style="{StaticResource ActionChipStyle}"
                                     Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
                                     Content="⚡ Thêm thẳng vào Notebook" ToolTip="Đưa trực tiếp tệp/link vào Sổ tay NotebookLM đang mở mà không mở thêm tab mới" Click="BtnSendToNotebookLM_Click"/>
@@ -957,6 +958,102 @@
                 <TextBlock x:Name="TxtToastIcon" Text="✨" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
                 <TextBlock x:Name="TxtToastMessage" Text="Thông báo hệ thống" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
             </StackPanel>
+        </Border>
+
+        <!-- MODERN NOTEBOOKLM SETTINGS POPUP MODAL -->
+        <Border x:Name="PopupNotebookConfig" 
+                HorizontalAlignment="Center" VerticalAlignment="Top" 
+                Margin="0,48,0,0" 
+                Width="560" 
+                CornerRadius="20" 
+                Background="#121626" 
+                BorderThickness="1.5" 
+                BorderBrush="#38BDF8" 
+                Padding="22,18" 
+                Visibility="Collapsed" 
+                Opacity="0">
+            <Border.Effect>
+                <DropShadowEffect x:Name="PopupNotebookGlow" Color="#0284C7" BlurRadius="32" ShadowDepth="0" Opacity="0.85"/>
+            </Border.Effect>
+            <Border.RenderTransform>
+                <TranslateTransform x:Name="PopupNotebookTranslate" Y="-20"/>
+            </Border.RenderTransform>
+
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header -->
+                <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Width="34" Height="34" CornerRadius="10" Background="#0C2540" BorderThickness="1" BorderBrush="#38BDF8" Margin="0,0,10,0">
+                            <TextBlock Text="🪐" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Cài đặt Liên kết Sổ tay NotebookLM" Foreground="#F8FAFC" FontSize="14.5" FontWeight="Bold"/>
+                            <TextBlock Text="Tự động lưu làm Sổ tay mặc định để thêm nguồn nhanh" Foreground="#94A3B8" FontSize="11" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <Button Grid.Column="1" Style="{StaticResource CircleIconBtn}" Width="26" Height="26" ToolTip="Đóng" Click="BtnCloseNotebookPopup_Click">
+                        <TextBlock Text="✕" FontSize="12"/>
+                    </Button>
+                </Grid>
+
+                <!-- Description / Instructions -->
+                <TextBlock Grid.Row="1" Text="Dán đường dẫn sổ tay của bạn từ trình duyệt (dạng https://notebooklm.google.com/notebook/[id]). Dynamic Island sẽ tự động lưu và kết nối trực tiếp đến Sổ tay này."
+                           Foreground="#CBD5E1" FontSize="11.5" TextWrapping="Wrap" LineHeight="16" Margin="0,0,0,12"/>
+
+                <!-- Input Box with Clipboard Paste Button -->
+                <Border Grid.Row="2" Background="#070B14" BorderBrush="#334155" BorderThickness="1.2" CornerRadius="12" Padding="12,6" Margin="0,0,0,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock x:Name="TxtPopupUrlPlaceholder" Text="https://notebooklm.google.com/notebook/..." Foreground="#64748B" FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                            <TextBox x:Name="InputPopupNotebookUrl" Background="Transparent" Foreground="#38BDF8" BorderThickness="0" FontSize="12" VerticalAlignment="Center"
+                                     TextChanged="InputPopupNotebookUrl_TextChanged" KeyDown="InputPopupNotebookUrl_KeyDown"/>
+                        </Grid>
+
+                        <Button x:Name="BtnPasteFromClipboard" Grid.Column="1" Style="{StaticResource ActionChipStyle}" 
+                                Content="📋 Dán từ Clipboard" Padding="8,4" FontSize="11" Click="BtnPasteFromClipboard_Click"/>
+                    </Grid>
+                </Border>
+
+                <!-- Status Feedback & Action Buttons -->
+                <Grid Grid.Row="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Realtime Validation Status -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="TxtPopupValidationStatus" Text="💡 Hãy dán liên kết Sổ tay NotebookLM của bạn vào ô trên" 
+                                   Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+
+                    <!-- Buttons -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Style="{StaticResource ActionChipStyle}" Content="Hủy" Margin="0,0,8,0" Padding="12,5" Click="BtnCloseNotebookPopup_Click"/>
+                        <Button x:Name="BtnSavePopupNotebook" Style="{StaticResource ActionChipStyle}" 
+                                Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
+                                Content="💾 Lưu &amp; Kết nối" Padding="14,5" Click="BtnSavePopupNotebook_Click"/>
+                    </StackPanel>
+                </Grid>
+            </Grid>
         </Border>
 
     </Grid>

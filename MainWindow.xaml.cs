@@ -152,6 +152,7 @@ namespace DynamicIsland
         private string? _currentFilePath = null;
         private string? _currentSourceUrl = null;
         private string _notebookName = "";
+        private string _notebookUrl = "";
         private bool _isNotebookVerified = false;
 
         // Persistent Deleted Notifications
@@ -278,6 +279,16 @@ namespace DynamicIsland
         // Keyboard arrow navigation (Left, Right to move, Down / Home to center)
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (e.Key == Key.Escape)
+            {
+                if (PopupNotebookConfig != null && PopupNotebookConfig.Visibility == Visibility.Visible)
+                {
+                    CloseNotebookConfigModal();
+                    e.Handled = true;
+                    return;
+                }
+            }
+
             if (e.OriginalSource is TextBox) return;
 
             if (e.Key == Key.Left)
@@ -1194,7 +1205,7 @@ namespace DynamicIsland
                     BorderNotebookStatus.Background = (Brush)new BrushConverter().ConvertFromString("#291219")!;
                     BorderNotebookStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#E11D48")!;
                     TxtNotebookStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#FDA4AF")!;
-                    TxtNotebookStatus.Text = "🔴 Chưa xác thực (Cần link .../notebook/ID)";
+                    TxtNotebookStatus.Text = "🔴 Chưa xác thực Sổ tay (Bấm để cài)";
                     BtnSendToNotebookLM.IsEnabled = false;
                     BtnSendToNotebookLM.Opacity = 0.55;
                 }
@@ -1329,7 +1340,7 @@ namespace DynamicIsland
             }
             catch { }
 
-            string url = InputNotebookUrl.Text.Trim();
+            string url = !string.IsNullOrWhiteSpace(_notebookUrl) ? _notebookUrl : (InputNotebookUrl?.Text ?? "").Trim();
             IntPtr hWnd = FindNotebookLmWindow(out string windowTitle);
 
             string detected = ExtractNotebookName(windowTitle, url);
@@ -1394,8 +1405,9 @@ namespace DynamicIsland
                             savedName = parts[1].Trim();
                         }
 
-                        InputNotebookUrl.Text = savedUrl;
-                        TxtNotebookUrlPlaceholder.Visibility = string.IsNullOrEmpty(savedUrl) ? Visibility.Visible : Visibility.Collapsed;
+                        _notebookUrl = savedUrl;
+                        if (InputNotebookUrl != null) InputNotebookUrl.Text = savedUrl;
+                        if (InputPopupNotebookUrl != null) InputPopupNotebookUrl.Text = savedUrl;
                         _notebookName = savedName;
                         if (!string.IsNullOrWhiteSpace(_notebookName))
                         {
@@ -1409,8 +1421,9 @@ namespace DynamicIsland
             }
             catch { }
 
-            InputNotebookUrl.Text = "";
-            TxtNotebookUrlPlaceholder.Visibility = Visibility.Visible;
+            _notebookUrl = "";
+            if (InputNotebookUrl != null) InputNotebookUrl.Text = "";
+            if (InputPopupNotebookUrl != null) InputPopupNotebookUrl.Text = "";
             UpdateNotebookLmStatus(false, "", "", false);
         }
 
@@ -1425,33 +1438,211 @@ namespace DynamicIsland
             catch { }
         }
 
-        private void BtnSaveNotebookUrl_Click(object sender, RoutedEventArgs e)
+        private void ApplyNotebookUrl(string url, bool showToast = false)
         {
-            string text = InputNotebookUrl.Text.Trim();
-            if (IsAuthenticNotebookLink(text))
+            url = url.Trim();
+            _notebookUrl = url;
+            if (InputNotebookUrl != null) InputNotebookUrl.Text = url;
+            if (InputPopupNotebookUrl != null) InputPopupNotebookUrl.Text = url;
+
+            bool authentic = IsAuthenticNotebookLink(url);
+            string detected = ExtractNotebookName("", url);
+            if (!string.IsNullOrWhiteSpace(detected))
             {
-                string detected = ExtractNotebookName("", text);
-                if (!string.IsNullOrWhiteSpace(detected))
-                {
-                    _notebookName = detected;
-                    TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
-                }
-                SaveNotebookLmConfig(text, _notebookName);
-                UpdateNotebookLmStatus(true, text, _notebookName, false);
-                ShowModernToast("Đã lưu và xác thực Sổ tay thành công!", "🟢", "#10B981");
+                _notebookName = detected;
+                TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
             }
             else
             {
-                UpdateNotebookLmStatus(false, text, "", false);
+                TxtNotebookHeaderTitle.Text = "NotebookLM";
+            }
+
+            SaveNotebookLmConfig(url, _notebookName);
+            UpdateNotebookLmStatus(authentic, url, _notebookName, false);
+
+            if (showToast)
+            {
+                if (authentic)
+                {
+                    ShowModernToast(string.IsNullOrEmpty(_notebookName) ? "✓ Đã liên kết Sổ tay NotebookLM thành công!" : $"✓ Đã liên kết: '{_notebookName}'!", "🟢", "#10B981");
+                }
+                else
+                {
+                    ShowModernToast("Link Sổ tay chưa đúng chuẩn notebooklm.google.com/notebook/[id]", "⚠️", "#EF4444");
+                }
+            }
+        }
+
+        #region Modern NotebookLM Config Popup Modal Handlers
+        private void OpenNotebookConfigModal()
+        {
+            if (PopupNotebookConfig == null) return;
+            string current = !string.IsNullOrWhiteSpace(_notebookUrl) ? _notebookUrl : (InputNotebookUrl?.Text ?? "").Trim();
+            InputPopupNotebookUrl.Text = current;
+            TxtPopupUrlPlaceholder.Visibility = string.IsNullOrEmpty(current) ? Visibility.Visible : Visibility.Collapsed;
+
+            // If empty, auto-inspect clipboard
+            if (string.IsNullOrEmpty(current))
+            {
+                try
+                {
+                    if (Clipboard.ContainsText())
+                    {
+                        string clip = Clipboard.GetText().Trim();
+                        if (IsAuthenticNotebookLink(clip))
+                        {
+                            InputPopupNotebookUrl.Text = clip;
+                            TxtPopupUrlPlaceholder.Visibility = Visibility.Collapsed;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            InputPopupNotebookUrl_TextChanged(InputPopupNotebookUrl, null!);
+
+            PopupNotebookConfig.Visibility = Visibility.Visible;
+            var fadeIn = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+            };
+            var slideDown = new DoubleAnimation(-20, 0, TimeSpan.FromMilliseconds(250))
+            {
+                EasingFunction = new BackEase { Amplitude = 0.3, EasingMode = EasingMode.EaseOut }
+            };
+
+            PopupNotebookConfig.BeginAnimation(OpacityProperty, fadeIn);
+            PopupNotebookTranslate.BeginAnimation(TranslateTransform.YProperty, slideDown);
+            InputPopupNotebookUrl.Focus();
+            InputPopupNotebookUrl.SelectAll();
+        }
+
+        private void CloseNotebookConfigModal()
+        {
+            if (PopupNotebookConfig == null || PopupNotebookConfig.Visibility != Visibility.Visible) return;
+            var fadeOut = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+            };
+            var slideUp = new DoubleAnimation(0, -20, TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseIn }
+            };
+            fadeOut.Completed += (s, e) =>
+            {
+                PopupNotebookConfig.Visibility = Visibility.Collapsed;
+            };
+            PopupNotebookConfig.BeginAnimation(OpacityProperty, fadeOut);
+            PopupNotebookTranslate.BeginAnimation(TranslateTransform.YProperty, slideUp);
+        }
+
+        private void BorderNotebookStatus_Click(object sender, MouseButtonEventArgs e)
+        {
+            OpenNotebookConfigModal();
+        }
+
+        private void BtnOpenNotebookConfig_Click(object sender, RoutedEventArgs e)
+        {
+            OpenNotebookConfigModal();
+        }
+
+        private void BtnQuickPasteNotebook_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (Clipboard.ContainsText())
+                {
+                    string clip = Clipboard.GetText().Trim();
+                    if (IsAuthenticNotebookLink(clip))
+                    {
+                        ApplyNotebookUrl(clip, showToast: true);
+                        return;
+                    }
+                }
+            }
+            catch { }
+
+            OpenNotebookConfigModal();
+        }
+
+        private void BtnCloseNotebookPopup_Click(object sender, RoutedEventArgs e)
+        {
+            CloseNotebookConfigModal();
+        }
+
+        private void BtnPasteFromClipboard_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (Clipboard.ContainsText())
+                {
+                    string clip = Clipboard.GetText().Trim();
+                    InputPopupNotebookUrl.Text = clip;
+                    InputPopupNotebookUrl.Focus();
+                    InputPopupNotebookUrl.Select(clip.Length, 0);
+                }
+                else
+                {
+                    ShowModernToast("Clipboard hiện không có văn bản!", "⚠️", "#EF4444");
+                }
+            }
+            catch { }
+        }
+
+        private void InputPopupNotebookUrl_TextChanged(object sender, TextChangedEventArgs? e)
+        {
+            string text = InputPopupNotebookUrl.Text.Trim();
+            TxtPopupUrlPlaceholder.Visibility = string.IsNullOrEmpty(text) ? Visibility.Visible : Visibility.Collapsed;
+
+            bool authentic = IsAuthenticNotebookLink(text);
+            if (authentic)
+            {
+                string name = ExtractNotebookName("", text);
+                TxtPopupValidationStatus.Text = string.IsNullOrEmpty(name) ? "🟢 Sổ tay hợp lệ! Sẵn sàng kết nối" : $"🟢 Hợp lệ: Sổ tay '{name}'";
+                TxtPopupValidationStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
+            }
+            else if (string.IsNullOrEmpty(text))
+            {
+                TxtPopupValidationStatus.Text = "💡 Hãy dán liên kết Sổ tay NotebookLM của bạn vào ô trên";
+                TxtPopupValidationStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#94A3B8")!;
+            }
+            else
+            {
+                TxtPopupValidationStatus.Text = "🔴 Link chưa đúng dạng https://notebooklm.google.com/notebook/[id]";
+                TxtPopupValidationStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#EF4444")!;
+            }
+        }
+
+        private void InputPopupNotebookUrl_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                BtnSavePopupNotebook_Click(null!, null!);
+            }
+        }
+
+        private void BtnSavePopupNotebook_Click(object sender, RoutedEventArgs e)
+        {
+            string text = InputPopupNotebookUrl.Text.Trim();
+            if (IsAuthenticNotebookLink(text))
+            {
+                ApplyNotebookUrl(text, showToast: true);
+                CloseNotebookConfigModal();
+            }
+            else
+            {
                 ShowModernToast("Vui lòng nhập link Sổ tay thật dạng https://notebooklm.google.com/notebook/<id>!", "⚠️", "#EF4444");
             }
+        }
+
+        private void BtnSaveNotebookUrl_Click(object sender, RoutedEventArgs e)
+        {
+            BtnSavePopupNotebook_Click(sender, e);
         }
 
         private void InputNotebookUrl_TextChanged(object sender, TextChangedEventArgs e)
         {
             string text = InputNotebookUrl.Text.Trim();
-            TxtNotebookUrlPlaceholder.Visibility = string.IsNullOrEmpty(text) ? Visibility.Visible : Visibility.Collapsed;
-
             bool authentic = IsAuthenticNotebookLink(text);
             string detected = ExtractNotebookName("", text);
             if (!string.IsNullOrWhiteSpace(detected))
@@ -1466,6 +1657,7 @@ namespace DynamicIsland
                 SaveNotebookLmConfig(text, _notebookName);
             }
         }
+        #endregion
 
         private void Dropzone_DragOver(object sender, DragEventArgs e)
         {
@@ -1591,10 +1783,11 @@ namespace DynamicIsland
 
         private async void BtnSendToNotebookLM_Click(object sender, RoutedEventArgs e)
         {
-            string url = InputNotebookUrl.Text.Trim();
+            string url = !string.IsNullOrWhiteSpace(_notebookUrl) ? _notebookUrl : (InputNotebookUrl?.Text ?? "").Trim();
             if (!IsAuthenticNotebookLink(url))
             {
-                ShowModernToast("Vui lòng nhập link Sổ tay thật (.../notebook/ID) trước khi thêm nguồn!", "⚠️", "#F59E0B");
+                ShowModernToast("Vui lòng dán link Sổ tay thật (.../notebook/ID) trước khi thêm nguồn!", "⚠️", "#F59E0B");
+                OpenNotebookConfigModal();
                 return;
             }
 
