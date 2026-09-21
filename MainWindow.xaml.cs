@@ -330,6 +330,14 @@ namespace DynamicIsland
 
         private void DragHandle_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            if (e.ClickCount == 2)
+            {
+                SetHorizontalOffset(0);
+                ShowModernToast("Đã căn giữa Dynamic Island!", "⦿", "#38BDF8");
+                e.Handled = true;
+                return;
+            }
+
             _isDraggingHandle = true;
             _dragStartScreenPos = PointToScreen(e.GetPosition(this));
             _dragStartOffset = _horizontalOffset;
@@ -358,20 +366,69 @@ namespace DynamicIsland
             }
         }
 
-        private void BtnRecordScreen_Click(object sender, RoutedEventArgs e)
+        private async void BtnRecordScreen_Click(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
             try
             {
-                Process.Start(new ProcessStartInfo("ms-screenclip:") { UseShellExecute = true });
+                double prevOpacity = this.Opacity;
+
+                // 1. Tự động ẩn Dynamic Island để không bị vướng / lọt vào ảnh chụp
+                this.Opacity = 0;
+                this.Visibility = Visibility.Hidden;
+
+                // Nghỉ 200ms để DWM kịp vẽ lại màn hình sạch sẽ
+                await Task.Delay(200);
+
+                // 2. Kích hoạt công cụ chụp / quay màn hình Windows
+                try
+                {
+                    Process.Start(new ProcessStartInfo("ms-screenclip:") { UseShellExecute = true });
+                }
+                catch
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo("explorer.exe", "ms-gamebar:") { UseShellExecute = true });
+                    }
+                    catch { }
+                }
+
+                // 3. Đợi người dùng khoanh vùng chụp xong (kiểm tra clipboard có ảnh mới hoặc chờ tối đa 6.5s)
+                bool captured = false;
+                await Task.Delay(1200);
+
+                for (int i = 0; i < 22; i++)
+                {
+                    await Task.Delay(250);
+                    try
+                    {
+                        if (Clipboard.ContainsImage())
+                        {
+                            captured = true;
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+
+                // 4. Hiện lại thanh Dynamic Island mượt mà như cũ
+                this.Visibility = Visibility.Visible;
+                var fadeIn = new DoubleAnimation(0, prevOpacity > 0 ? prevOpacity : 1.0, TimeSpan.FromMilliseconds(250))
+                {
+                    EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                };
+                this.BeginAnimation(OpacityProperty, fadeIn);
+
+                if (captured)
+                {
+                    ShowModernToast("Đã chụp và lưu ảnh vào Clipboard!", "📸", "#38BDF8");
+                }
             }
             catch
             {
-                try
-                {
-                    Process.Start(new ProcessStartInfo("explorer.exe", "ms-gamebar:") { UseShellExecute = true });
-                }
-                catch { }
+                this.Visibility = Visibility.Visible;
+                this.Opacity = 1.0;
             }
         }
         #endregion
@@ -387,7 +444,8 @@ namespace DynamicIsland
                 if (FindVisualParent<Button>(dep) != null || 
                     FindVisualParent<TextBox>(dep) != null || 
                     FindVisualParent<Slider>(dep) != null ||
-                    FindVisualParent<Border>(dep)?.Name == "DragGripHandle")
+                    FindVisualParent<Border>(dep)?.Tag?.ToString() == "DragGrip" ||
+                    FindVisualParent<Border>(dep)?.Name?.StartsWith("DragGrip") == true)
                 {
                     return;
                 }
@@ -466,6 +524,11 @@ namespace DynamicIsland
 
         private void TriggerCenterDropletDrop()
         {
+            if (_currentState == IslandState.Camera)
+            {
+                CloseCameraAppIfRunning();
+            }
+
             // Drop straight down along the center vertical axis: X = 474 (Window center: 490 - 16)
             double centerX = 474;
             double startY = Math.Max(25, _initialNotchHeight - 8);
@@ -978,7 +1041,7 @@ namespace DynamicIsland
                 _pomoTimer.Stop();
                 _pomoIsRunning = false;
                 BtnPomoStartPause.Content = "▶ Start";
-                MessageBox.Show("🔔 Hết phiên làm việc! Hãy nghỉ ngơi thư giãn đôi mắt.", "Pomodoro Dynamic Island", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowModernToast("Hết phiên làm việc! Hãy nghỉ ngơi thư giãn đôi mắt.", "🔔", "#EAB308");
             }
         }
 
@@ -1041,6 +1104,41 @@ namespace DynamicIsland
             "DynamicIsland", "notebooklm_url.txt"
         );
 
+        private bool IsValidNotebookLmUrl(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return false;
+            url = url.Trim();
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "https://" + url;
+            }
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult)) return false;
+
+            string host = uriResult.Host.ToLowerInvariant();
+            return host.Contains("notebooklm") || (host.Contains("google.com") && uriResult.AbsolutePath.Contains("notebook"));
+        }
+
+        private void UpdateNotebookLmStatus(bool isValid, string url)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (isValid)
+                {
+                    BorderNotebookStatus.Background = (Brush)new BrushConverter().ConvertFromString("#064E3B")!;
+                    BorderNotebookStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
+                    TxtNotebookStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#34D399")!;
+                    TxtNotebookStatus.Text = url.Contains("/notebook/") ? "🟢 Đã kết nối Sổ tay NotebookLM" : "🟢 Đã kết nối NotebookLM";
+                }
+                else
+                {
+                    BorderNotebookStatus.Background = (Brush)new BrushConverter().ConvertFromString("#291F03")!;
+                    BorderNotebookStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#EAB308")!;
+                    TxtNotebookStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#FDE047")!;
+                    TxtNotebookStatus.Text = "🟡 Chưa liên kết (Nhập URL NotebookLM)";
+                }
+            });
+        }
+
         private void LoadNotebookLmConfig()
         {
             try
@@ -1052,35 +1150,62 @@ namespace DynamicIsland
                     {
                         InputNotebookUrl.Text = savedUrl;
                         TxtNotebookUrlPlaceholder.Visibility = Visibility.Collapsed;
-                        TxtNotebookStatus.Text = "🟢 Đã kết nối NotebookLM";
+                        bool valid = IsValidNotebookLmUrl(savedUrl);
+                        UpdateNotebookLmStatus(valid, savedUrl);
                         return;
                     }
                 }
             }
             catch { }
+
             InputNotebookUrl.Text = "https://notebooklm.google.com/";
             TxtNotebookUrlPlaceholder.Visibility = Visibility.Collapsed;
+            UpdateNotebookLmStatus(true, InputNotebookUrl.Text);
         }
 
         private void BtnSaveNotebookUrl_Click(object sender, RoutedEventArgs e)
         {
-            try
+            string text = InputNotebookUrl.Text.Trim();
+            if (IsValidNotebookLmUrl(text))
             {
-                string dir = Path.GetDirectoryName(_notebookLmConfigPath)!;
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                File.WriteAllText(_notebookLmConfigPath, InputNotebookUrl.Text.Trim());
-                TxtNotebookStatus.Text = "🟢 Đã lưu link NotebookLM";
-                MessageBox.Show("Đã lưu liên kết NotebookLM thành công!", "NotebookLM Dropzone", MessageBoxButton.OK, MessageBoxImage.Information);
+                try
+                {
+                    string dir = Path.GetDirectoryName(_notebookLmConfigPath)!;
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    File.WriteAllText(_notebookLmConfigPath, text);
+                    UpdateNotebookLmStatus(true, text);
+                    ShowModernToast("Đã lưu và kết nối NotebookLM thành công!", "🟢", "#10B981");
+                }
+                catch (Exception ex)
+                {
+                    ShowModernToast("Lỗi khi lưu link: " + ex.Message, "⚠️", "#EF4444");
+                }
             }
-            catch (Exception ex)
+            else
             {
-                MessageBox.Show("Lỗi khi lưu link: " + ex.Message, "Lỗi", MessageBoxButton.OK, MessageBoxImage.Warning);
+                UpdateNotebookLmStatus(false, text);
+                ShowModernToast("Vui lòng nhập đúng định dạng link NotebookLM (notebooklm.google.com/...)!", "⚠️", "#F59E0B");
             }
         }
 
         private void InputNotebookUrl_TextChanged(object sender, TextChangedEventArgs e)
         {
-            TxtNotebookUrlPlaceholder.Visibility = string.IsNullOrEmpty(InputNotebookUrl.Text) ? Visibility.Visible : Visibility.Collapsed;
+            string text = InputNotebookUrl.Text.Trim();
+            TxtNotebookUrlPlaceholder.Visibility = string.IsNullOrEmpty(text) ? Visibility.Visible : Visibility.Collapsed;
+
+            bool isValid = IsValidNotebookLmUrl(text);
+            UpdateNotebookLmStatus(isValid, text);
+
+            if (isValid)
+            {
+                try
+                {
+                    string dir = Path.GetDirectoryName(_notebookLmConfigPath)!;
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    File.WriteAllText(_notebookLmConfigPath, text);
+                }
+                catch { }
+            }
         }
 
         private void Dropzone_DragOver(object sender, DragEventArgs e)
@@ -1138,6 +1263,8 @@ namespace DynamicIsland
                 ".mp4" or ".mkv" => "🎬",
                 _ => "📁"
             };
+
+            ShowModernToast($"Đã nhận tệp: {fi.Name}", "📎", "#10B981");
         }
 
         private void BtnOpenDownloads_Click(object sender, RoutedEventArgs e)
@@ -1149,11 +1276,14 @@ namespace DynamicIsland
                     : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads";
 
                 if (Directory.Exists(folder))
+                {
                     Process.Start("explorer.exe", folder);
+                    ShowModernToast("Đã mở thư mục tệp!", "📂", "#10B981");
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message);
+                ShowModernToast("Lỗi mở thư mục: " + ex.Message, "⚠️", "#EF4444");
             }
         }
 
@@ -1163,7 +1293,8 @@ namespace DynamicIsland
             try
             {
                 Clipboard.SetText(path);
-                MessageBox.Show($"Đã sao chép đường dẫn:\n{path}", "Dynamic Island Dropzone", MessageBoxButton.OK, MessageBoxImage.Information);
+                string fileName = Path.GetFileName(path);
+                ShowModernToast($"Đã copy đường dẫn: {(string.IsNullOrEmpty(fileName) ? path : fileName)}", "📋", "#38BDF8");
             }
             catch { }
         }
@@ -1195,11 +1326,12 @@ namespace DynamicIsland
             try
             {
                 Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-                TxtFileMeta.Text = "✅ Đã mở NotebookLM! Đường dẫn file đã copy sẵn, bạn chỉ cần bấm Upload hoặc Add Sources.";
+                TxtFileMeta.Text = "✅ Đã mở NotebookLM! Đường dẫn file đã copy sẵn trong Clipboard.";
+                ShowModernToast("Đang mở Google NotebookLM...", "🚀", "#38BDF8");
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Không thể mở trình duyệt: " + ex.Message, "NotebookLM", MessageBoxButton.OK, MessageBoxImage.Warning);
+                ShowModernToast("Không thể mở trình duyệt: " + ex.Message, "⚠️", "#EF4444");
             }
         }
 
@@ -1213,9 +1345,66 @@ namespace DynamicIsland
         }
         #endregion
 
+        #region Modern HUD Floating Toast System
+        private DispatcherTimer? _toastTimer;
+
+        public void ShowModernToast(string message, string icon = "✨", string accentColor = "#10B981")
+        {
+            Dispatcher.Invoke(() =>
+            {
+                try
+                {
+                    TxtToastMessage.Text = message;
+                    TxtToastIcon.Text = icon;
+
+                    var brush = (Brush)new BrushConverter().ConvertFromString(accentColor)!;
+                    ModernToastHost.BorderBrush = brush;
+                    ToastGlow.Color = (Color)ColorConverter.ConvertFromString(accentColor);
+
+                    ModernToastHost.Visibility = Visibility.Visible;
+
+                    // Slide down & Fade in
+                    var fadeIn = new DoubleAnimation(0, 1.0, TimeSpan.FromMilliseconds(200));
+                    var slideDown = new DoubleAnimation(-15, 0, TimeSpan.FromMilliseconds(200))
+                    {
+                        EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                    };
+
+                    ModernToastHost.BeginAnimation(OpacityProperty, fadeIn);
+                    ToastTranslate.BeginAnimation(TranslateTransform.YProperty, slideDown);
+
+                    _toastTimer?.Stop();
+                    _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.6) };
+                    _toastTimer.Tick += (s, ev) =>
+                    {
+                        _toastTimer.Stop();
+                        var fadeOut = new DoubleAnimation(1.0, 0, TimeSpan.FromMilliseconds(250));
+                        var slideUp = new DoubleAnimation(0, -15, TimeSpan.FromMilliseconds(250))
+                        {
+                            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
+                        };
+                        fadeOut.Completed += (s2, ev2) =>
+                        {
+                            ModernToastHost.Visibility = Visibility.Collapsed;
+                        };
+                        ModernToastHost.BeginAnimation(OpacityProperty, fadeOut);
+                        ToastTranslate.BeginAnimation(TranslateTransform.YProperty, slideUp);
+                    };
+                    _toastTimer.Start();
+                }
+                catch { }
+            });
+        }
+        #endregion
+
         #region State Transitions & Task Proportions
         private void SwitchState(IslandState newState)
         {
+            if (_currentState == IslandState.Camera && newState != IslandState.Camera)
+            {
+                CloseCameraAppIfRunning();
+            }
+
             if (_currentState == newState) return;
             ApplyState(newState, animate: true);
         }
@@ -1253,7 +1442,7 @@ namespace DynamicIsland
                 switch (newState)
                 {
                     case IslandState.Mini:
-                        targetWidth = 58;
+                        targetWidth = 74;
                         targetHeight = 32;
                         targetView = ViewMini;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#A855F7");
@@ -1285,6 +1474,7 @@ namespace DynamicIsland
                         targetHeight = 110;
                         targetView = ViewCamera;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#10B981");
+                        UpdateCameraUi(Process.GetProcessesByName("WindowsCamera").Length > 0);
                         break;
 
                     case IslandState.Notification:
@@ -1347,23 +1537,11 @@ namespace DynamicIsland
         #endregion
 
         #region User Interaction Handlers
-        // Position buttons (Move Left, Right, Center Reset)
-        private void BtnMoveLeft_Click(object sender, RoutedEventArgs e)
-        {
-            e.Handled = true;
-            SetHorizontalOffset(_horizontalOffset - 40);
-        }
-
-        private void BtnMoveRight_Click(object sender, RoutedEventArgs e)
-        {
-            e.Handled = true;
-            SetHorizontalOffset(_horizontalOffset + 40);
-        }
-
         private void BtnResetCenter_Click(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
             SetHorizontalOffset(0);
+            ShowModernToast("Đã căn giữa Dynamic Island!", "⦿", "#38BDF8");
         }
 
         // Close to compact mode
@@ -1402,7 +1580,10 @@ namespace DynamicIsland
         {
             try
             {
-                Process.Start(new ProcessStartInfo("microsoft.windows.camera:") { UseShellExecute = true });
+                if (Process.GetProcessesByName("WindowsCamera").Length == 0)
+                {
+                    Process.Start(new ProcessStartInfo("microsoft.windows.camera:") { UseShellExecute = true });
+                }
             }
             catch { }
             TriggerReverseDropletToTask(OrbCamera, IslandState.Camera);
@@ -1415,15 +1596,71 @@ namespace DynamicIsland
         }
 
         #region Camera Laptop & Webcam Handlers
-        private void BtnLaunchCamera_Click(object sender, RoutedEventArgs e)
+        private void CloseCameraAppIfRunning()
         {
             try
             {
-                Process.Start(new ProcessStartInfo("microsoft.windows.camera:") { UseShellExecute = true });
+                var procs = Process.GetProcessesByName("WindowsCamera");
+                foreach (var p in procs)
+                {
+                    try { p.Kill(); } catch { }
+                }
+                UpdateCameraUi(isRunning: false);
+            }
+            catch { }
+        }
+
+        private void UpdateCameraUi(bool isRunning)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                if (isRunning)
+                {
+                    BtnToggleCamera.Content = "🛑 Tắt Camera";
+                    BtnToggleCamera.Background = (Brush)new BrushConverter().ConvertFromString("#991B1B")!;
+                    BtnToggleCamera.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#EF4444")!;
+                    TxtCameraStatus.Text = "🟢 Đang mở";
+                    TxtCameraStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#34D399")!;
+                    BorderCameraStatus.Background = (Brush)new BrushConverter().ConvertFromString("#064E3B")!;
+                    BorderCameraStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#10B981")!;
+                }
+                else
+                {
+                    BtnToggleCamera.Content = "📷 Bật Camera";
+                    BtnToggleCamera.Background = (Brush)new BrushConverter().ConvertFromString("#059669")!;
+                    BtnToggleCamera.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#34D399")!;
+                    TxtCameraStatus.Text = "⚪ Đang tắt";
+                    TxtCameraStatus.Foreground = (Brush)new BrushConverter().ConvertFromString("#94A3B8")!;
+                    BorderCameraStatus.Background = (Brush)new BrushConverter().ConvertFromString("#1E293B")!;
+                    BorderCameraStatus.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#475569")!;
+                }
+            });
+        }
+
+        private void BtnToggleCamera_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var procs = Process.GetProcessesByName("WindowsCamera");
+                if (procs.Length > 0)
+                {
+                    foreach (var p in procs)
+                    {
+                        try { p.Kill(); } catch { }
+                    }
+                    UpdateCameraUi(isRunning: false);
+                    ShowModernToast("Đã tắt Camera laptop!", "🛑", "#EF4444");
+                }
+                else
+                {
+                    Process.Start(new ProcessStartInfo("microsoft.windows.camera:") { UseShellExecute = true });
+                    UpdateCameraUi(isRunning: true);
+                    ShowModernToast("Đang bật Camera laptop...", "📷", "#10B981");
+                }
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Không thể mở ứng dụng Camera: " + ex.Message, "Camera Laptop", MessageBoxButton.OK, MessageBoxImage.Information);
+                ShowModernToast("Không thể điều khiển Camera: " + ex.Message, "⚠️", "#F59E0B");
             }
         }
 
