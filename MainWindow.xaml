@@ -14,6 +14,7 @@
         ShowInTaskbar="False"
         WindowStartupLocation="Manual"
         Loaded="Window_Loaded"
+        PreviewMouseDown="Window_PreviewMouseDown"
         PreviewKeyDown="Window_PreviewKeyDown"
         PreviewMouseMove="Window_PreviewMouseMove"
         PreviewMouseUp="Window_PreviewMouseUp">
@@ -778,8 +779,11 @@
                                     <Grid>
                                         <TextBlock x:Name="TxtReplyPlaceholder" Text="Nhập nội dung trả lời trực tiếp..." Foreground="#64748B" 
                                                    FontSize="11" VerticalAlignment="Center" IsHitTestVisible="False"/>
-                                        <TextBox x:Name="InputReply" Background="Transparent" Foreground="#F8FAFC" BorderThickness="0" 
+                                        <TextBox x:Name="InputReply" Background="Transparent" Foreground="#F8FAFC" 
+                                                 CaretBrush="#38BDF8" BorderThickness="0" 
                                                  FontSize="11.5" VerticalAlignment="Center"
+                                                 PreviewMouseLeftButtonDown="TextBox_PreviewMouseLeftButtonDown"
+                                                 GotFocus="TextBox_GotFocus"
                                                  TextChanged="InputReply_TextChanged"
                                                  KeyDown="InputReply_KeyDown"/>
                                     </Grid>
@@ -796,17 +800,18 @@
                         </Grid>
                     </Grid>
 
-                    <!-- 7. DROPZONE TASK: NOTEBOOKLM INTEGRATION (Size: 660x155) -->
-                    <Grid x:Name="ViewDropzone" Visibility="Collapsed" Margin="16,8"
+                    <!-- 7. DROPZONE TASK: NOTEBOOKLM INTEGRATION (Size: 680x175) -->
+                    <Grid x:Name="ViewDropzone" Visibility="Collapsed" Margin="14,6"
                           AllowDrop="True" Drop="Dropzone_Drop" DragOver="Dropzone_DragOver">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <!-- Header: NotebookLM Status & Config with Drag Handle & Refresh -->
-                        <Grid Grid.Row="0" Margin="0,0,0,6">
+                        <!-- Row 0: Header with Drag Handle, Title, Status & Controls -->
+                        <Grid Grid.Row="0" Margin="0,0,0,5">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
@@ -825,23 +830,13 @@
 
                                 <TextBlock Text="📁" FontSize="14" Margin="0,0,5,0" VerticalAlignment="Center"/>
                                 <TextBlock x:Name="TxtNotebookHeaderTitle" Text="NotebookLM" Foreground="#F8FAFC" FontSize="13" FontWeight="Bold" VerticalAlignment="Center"/>
-                                <Border x:Name="BorderNotebookStatus" Background="#291219" BorderBrush="#E11D48" BorderThickness="0.8" CornerRadius="8" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center"
-                                        Cursor="Hand" ToolTip="Nhấp vào đây để mở bảng dán / đổi liên kết Sổ tay NotebookLM"
-                                        MouseLeftButtonDown="BorderNotebookStatus_Click">
-                                    <TextBlock x:Name="TxtNotebookStatus" Text="🔴 Chưa xác thực Sổ tay (Bấm để cài)" Foreground="#FDA4AF" FontSize="10.5" FontWeight="SemiBold"/>
+                                <Border x:Name="BorderNotebookStatus" Background="#291219" BorderBrush="#E11D48" BorderThickness="0.8" CornerRadius="8" Padding="8,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtNotebookStatus" Text="🔴 Chưa xác thực Sổ tay" Foreground="#FDA4AF" FontSize="10.5" FontWeight="SemiBold"/>
                                 </Border>
                             </StackPanel>
 
-                            <!-- Hidden backing input box for backward compatibility -->
-                            <TextBox x:Name="InputNotebookUrl" Visibility="Collapsed" TextChanged="InputNotebookUrl_TextChanged"/>
-
-                            <!-- Quick Paste / Configure & Refresh & Close -->
+                            <!-- Refresh & Close -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button x:Name="BtnQuickPasteNotebook" Style="{StaticResource ActionChipStyle}" 
-                                        Background="#0F2B3E" BorderBrush="#38BDF8" Foreground="#38BDF8"
-                                        Content="🔗 Dán / Đổi Link Sổ tay" ToolTip="Dán trực tiếp link NotebookLM từ Clipboard hoặc mở bảng cài đặt Sổ tay" 
-                                        Margin="0,0,6,0" Padding="8,3" Click="BtnQuickPasteNotebook_Click"/>
-
                                 <Button x:Name="BtnRefreshNotebook" Style="{StaticResource CircleIconBtn}" Width="24" Height="24"
                                         ToolTip="Làm mới kết nối &amp; Quét lại tên Sổ tay NotebookLM từ trình duyệt" Margin="0,0,5,0"
                                         Click="BtnRefreshNotebook_Click">
@@ -858,8 +853,45 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- Staged Source Display Box (Files OR Web Links) -->
-                        <Border Grid.Row="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="10" Padding="10,6" Margin="0,0,0,6">
+                        <!-- Row 1: DIRECT, EDITABLE NOTEBOOK LINK INPUT BAR -->
+                        <Border Grid.Row="1" Background="#080D18" BorderBrush="#1E293B" BorderThickness="1.2" CornerRadius="10" Padding="8,3" Margin="0,0,0,5">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0" Text="🪐 Link Sổ tay:" Foreground="#94A3B8" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+
+                                <Grid Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtNotebookUrlPlaceholder" Text="Nhập hoặc dán link Sổ tay (https://notebooklm.google.com/notebook/[id])..." 
+                                               Foreground="#475569" FontSize="11" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                    <TextBox x:Name="InputNotebookUrl" 
+                                             Background="Transparent" Foreground="#38BDF8" 
+                                             CaretBrush="#38BDF8" BorderThickness="0" FontSize="11.5" 
+                                             VerticalAlignment="Center"
+                                             PreviewMouseLeftButtonDown="TextBox_PreviewMouseLeftButtonDown"
+                                             GotFocus="TextBox_GotFocus"
+                                             TextChanged="InputNotebookUrl_TextChanged"
+                                             KeyDown="InputNotebookUrl_KeyDown"/>
+                                </Grid>
+
+                                <Button x:Name="BtnQuickPasteNotebook" Grid.Column="2" Style="{StaticResource ActionChipStyle}" 
+                                        Background="#0F2840" BorderBrush="#0284C7" Foreground="#38BDF8"
+                                        Content="📋 Dán từ Clipboard" ToolTip="Dán trực tiếp link NotebookLM từ bộ nhớ tạm" 
+                                        Padding="7,2" Margin="4,0,4,0" FontSize="10.5" Click="BtnQuickPasteNotebook_Click"/>
+
+                                <Button x:Name="BtnSaveNotebookUrl" Grid.Column="3" Style="{StaticResource ActionChipStyle}" 
+                                        Background="#064E3B" BorderBrush="#10B981" Foreground="#34D399"
+                                        Content="💾 Lưu link" ToolTip="Lưu làm đường dẫn Sổ tay mặc định" 
+                                        Padding="8,2" FontSize="10.5" Click="BtnSaveNotebookUrl_Click"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Row 2: Staged Source Display Box (Files OR Web Links) -->
+                        <Border Grid.Row="2" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="10" Padding="8,4" Margin="0,0,0,5">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -867,13 +899,13 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
-                                <Border Grid.Column="0" Width="36" Height="36" CornerRadius="10" Background="#062E24" BorderThickness="1" BorderBrush="#10B981" Margin="0,0,10,0">
-                                    <TextBlock x:Name="TxtFileIcon" Text="📄" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Grid.Column="0" Width="30" Height="30" CornerRadius="8" Background="#062E24" BorderThickness="1" BorderBrush="#10B981" Margin="0,0,8,0">
+                                    <TextBlock x:Name="TxtFileIcon" Text="📄" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
 
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtFileName" Text="Kéo thả tệp hoặc bấm 'Dán Link Web / YouTube' (để nạp nguồn)" Foreground="#F8FAFC" FontSize="12" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock x:Name="TxtFileMeta" Text="Chưa có nguồn nào • Thả tệp hoặc dán link tài liệu để nạp vào Sổ tay" Foreground="#94A3B8" FontSize="10.5" Margin="0,1,0,0"/>
+                                    <TextBlock x:Name="TxtFileName" Text="Kéo thả tệp hoặc bấm '🌐 Dán Link Web / YouTube' để nạp nguồn" Foreground="#F8FAFC" FontSize="11.5" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="TxtFileMeta" Text="Chưa có nguồn tài liệu • Thả tệp hoặc dán link bài viết/video để thêm vào Sổ tay" Foreground="#94A3B8" FontSize="10" Margin="0,1,0,0"/>
                                 </StackPanel>
 
                                 <Button x:Name="BtnClearFiles" Grid.Column="2" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Xóa nguồn đã chọn" Visibility="Collapsed" Click="BtnClearFiles_Click">
@@ -882,15 +914,14 @@
                             </Grid>
                         </Border>
 
-                        <!-- Action Buttons: Send to NotebookLM, Browse, Paste Link -->
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
-                            <Button Style="{StaticResource ActionChipStyle}" Content="📎 Chọn Tệp từ máy" Margin="0,0,6,0" Click="BtnBrowseFile_Click"/>
-                            <Button x:Name="BtnPasteSourceLink" Style="{StaticResource ActionChipStyle}" Content="🌐 Dán Link Web / YouTube" ToolTip="Dán đường dẫn YouTube, Trang web hoặc Docs online để làm nguồn nạp vào NotebookLM" Margin="0,0,6,0" Click="BtnPasteSourceLink_Click"/>
-                            <Button Style="{StaticResource ActionChipStyle}" Content="⚙️ Cài đặt Sổ tay" Margin="0,0,6,0" Click="BtnOpenNotebookConfig_Click"/>
-                            <Button Style="{StaticResource ActionChipStyle}" Content="📂 Thư mục Downloads" Margin="0,0,6,0" Click="BtnOpenDownloads_Click"/>
+                        <!-- Row 3: Action Buttons -->
+                        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Style="{StaticResource ActionChipStyle}" Content="📎 Chọn Tệp từ máy" Margin="0,0,6,0" Padding="8,3" Click="BtnBrowseFile_Click"/>
+                            <Button x:Name="BtnPasteSourceLink" Style="{StaticResource ActionChipStyle}" Content="🌐 Dán Link Web / YouTube (Nguồn)" ToolTip="Dán đường dẫn YouTube, Trang web hoặc Docs online để làm nguồn nạp vào NotebookLM" Margin="0,0,6,0" Padding="8,3" Click="BtnPasteSourceLink_Click"/>
+                            <Button Style="{StaticResource ActionChipStyle}" Content="📂 Downloads" Margin="0,0,6,0" Padding="8,3" Click="BtnOpenDownloads_Click"/>
                             <Button x:Name="BtnSendToNotebookLM" Style="{StaticResource ActionChipStyle}"
                                     Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
-                                    Content="⚡ Thêm thẳng vào Notebook" ToolTip="Đưa trực tiếp tệp/link vào Sổ tay NotebookLM đang mở mà không mở thêm tab mới" Click="BtnSendToNotebookLM_Click"/>
+                                    Content="⚡ Thêm thẳng vào Notebook" ToolTip="Đưa trực tiếp tệp/link vào Sổ tay NotebookLM đang mở mà không mở thêm tab mới" Padding="12,3" Click="BtnSendToNotebookLM_Click"/>
                         </StackPanel>
                     </Grid>
 
@@ -1023,7 +1054,10 @@
 
                         <Grid Grid.Column="0" Margin="0,0,8,0">
                             <TextBlock x:Name="TxtPopupUrlPlaceholder" Text="https://notebooklm.google.com/notebook/..." Foreground="#64748B" FontSize="12" VerticalAlignment="Center" IsHitTestVisible="False"/>
-                            <TextBox x:Name="InputPopupNotebookUrl" Background="Transparent" Foreground="#38BDF8" BorderThickness="0" FontSize="12" VerticalAlignment="Center"
+                            <TextBox x:Name="InputPopupNotebookUrl" Background="Transparent" Foreground="#38BDF8" 
+                                     CaretBrush="#38BDF8" BorderThickness="0" FontSize="12" VerticalAlignment="Center"
+                                     PreviewMouseLeftButtonDown="TextBox_PreviewMouseLeftButtonDown"
+                                     GotFocus="TextBox_GotFocus"
                                      TextChanged="InputPopupNotebookUrl_TextChanged" KeyDown="InputPopupNotebookUrl_KeyDown"/>
                         </Grid>
 

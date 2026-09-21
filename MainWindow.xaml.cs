@@ -1578,6 +1578,7 @@ namespace DynamicIsland
                 {
                     string clip = Clipboard.GetText().Trim();
                     InputPopupNotebookUrl.Text = clip;
+                    ActivateWindow();
                     InputPopupNotebookUrl.Focus();
                     InputPopupNotebookUrl.Select(clip.Length, 0);
                 }
@@ -1637,12 +1638,23 @@ namespace DynamicIsland
 
         private void BtnSaveNotebookUrl_Click(object sender, RoutedEventArgs e)
         {
-            BtnSavePopupNotebook_Click(sender, e);
+            string text = InputNotebookUrl.Text.Trim();
+            if (IsAuthenticNotebookLink(text))
+            {
+                ApplyNotebookUrl(text, showToast: true);
+            }
+            else
+            {
+                ShowModernToast("Vui lòng nhập link Sổ tay thật dạng https://notebooklm.google.com/notebook/<id>!", "⚠️", "#EF4444");
+            }
         }
 
         private void InputNotebookUrl_TextChanged(object sender, TextChangedEventArgs e)
         {
             string text = InputNotebookUrl.Text.Trim();
+            TxtNotebookUrlPlaceholder.Visibility = string.IsNullOrEmpty(text) ? Visibility.Visible : Visibility.Collapsed;
+            _notebookUrl = text;
+
             bool authentic = IsAuthenticNotebookLink(text);
             string detected = ExtractNotebookName("", text);
             if (!string.IsNullOrWhiteSpace(detected))
@@ -1656,6 +1668,49 @@ namespace DynamicIsland
             {
                 SaveNotebookLmConfig(text, _notebookName);
             }
+        }
+
+        private void InputNotebookUrl_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                BtnSaveNotebookUrl_Click(sender, e);
+                e.Handled = true;
+            }
+        }
+
+        public void ActivateWindow()
+        {
+            try
+            {
+                var helper = new System.Windows.Interop.WindowInteropHelper(this);
+                IntPtr hWnd = helper.Handle;
+                if (hWnd != IntPtr.Zero)
+                {
+                    SetForegroundWindow(hWnd);
+                }
+                Activate();
+            }
+            catch { }
+        }
+
+        private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            ActivateWindow();
+        }
+
+        private void TextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            ActivateWindow();
+            if (sender is TextBox tb)
+            {
+                tb.Focus();
+            }
+        }
+
+        private void TextBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            ActivateWindow();
         }
         #endregion
 
@@ -2091,8 +2146,8 @@ namespace DynamicIsland
                         break;
 
                     case IslandState.Dropzone:
-                        targetWidth = 660;
-                        targetHeight = 155;
+                        targetWidth = 680;
+                        targetHeight = 175;
                         targetView = ViewDropzone;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#10B981");
                         _ = DetectAndRefreshNotebookAsync(showToast: false);
