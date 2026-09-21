@@ -1160,7 +1160,10 @@ namespace DynamicIsland
             if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? uriResult)) return false;
 
             string host = uriResult.Host.ToLowerInvariant();
-            if (!host.Contains("notebooklm")) return false;
+            bool isGoogleNotebookHost = host.Contains("notebooklm") || 
+                                       (host.Contains("notebook") && host.Contains("google")) ||
+                                       host.EndsWith("google.com", StringComparison.OrdinalIgnoreCase);
+            if (!isGoogleNotebookHost) return false;
 
             // An authentic notebook link MUST contain /notebook/ followed by a notebook ID
             string path = uriResult.AbsolutePath.ToLowerInvariant();
@@ -1235,10 +1238,13 @@ namespace DynamicIsland
                 GetWindowText(hWnd, builder, builder.Capacity);
                 string title = builder.ToString();
 
-                if (title.Contains("NotebookLM", StringComparison.OrdinalIgnoreCase))
+                if (title.Contains("NotebookLM", StringComparison.OrdinalIgnoreCase) ||
+                    (title.Contains("Notebook", StringComparison.OrdinalIgnoreCase) && title.Contains("Google", StringComparison.OrdinalIgnoreCase)))
                 {
                     // Prioritize specific notebook titles over generic home titles
-                    if (title.Contains("- NotebookLM", StringComparison.OrdinalIgnoreCase) || title.Contains("- Google NotebookLM", StringComparison.OrdinalIgnoreCase))
+                    if (title.Contains("- NotebookLM", StringComparison.OrdinalIgnoreCase) || 
+                        title.Contains("- Google NotebookLM", StringComparison.OrdinalIgnoreCase) ||
+                        title.Contains("- Notebook", StringComparison.OrdinalIgnoreCase))
                     {
                         bestHwnd = hWnd;
                         bestTitle = title;
