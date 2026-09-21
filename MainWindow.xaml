@@ -891,7 +891,10 @@
                         </Border>
 
                         <!-- Row 2: Staged Source Display Box (Files OR Web Links) -->
-                        <Border Grid.Row="2" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="10" Padding="8,4" Margin="0,0,0,5">
+                        <Border x:Name="BorderStagedSource" Grid.Row="2" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="10" Padding="8,4" Margin="0,0,0,5"
+                                Cursor="Hand" ToolTip="💡 Kéo khung này thả thẳng vào cửa sổ NotebookLM bên dưới để nạp nguồn!"
+                                PreviewMouseLeftButtonDown="BorderStagedSource_PreviewMouseLeftButtonDown"
+                                PreviewMouseMove="BorderStagedSource_PreviewMouseMove">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>

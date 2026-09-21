@@ -95,6 +95,9 @@ namespace DynamicIsland
         [DllImport("user32.dll")]
         private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
         private const int SW_RESTORE = 9;
         private const byte VK_CONTROL = 0x11;
         private const byte VK_V = 0x56;
@@ -1219,12 +1222,16 @@ namespace DynamicIsland
         {
             IntPtr bestHwnd = IntPtr.Zero;
             string bestTitle = "";
+            IntPtr fallbackBrowserHwnd = IntPtr.Zero;
+            string fallbackBrowserTitle = "";
             IntPtr myHwnd = IntPtr.Zero;
             try
             {
                 myHwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             }
             catch { }
+
+            string[] knownBrowsers = { "chrome", "msedge", "brave", "firefox", "opera", "vivaldi" };
 
             EnumWindows((hWnd, lParam) =>
             {
@@ -1237,31 +1244,62 @@ namespace DynamicIsland
                 var builder = new System.Text.StringBuilder(length + 1);
                 GetWindowText(hWnd, builder, builder.Capacity);
                 string title = builder.ToString();
+                if (string.IsNullOrWhiteSpace(title)) return true;
 
-                if (title.Contains("NotebookLM", StringComparison.OrdinalIgnoreCase) ||
-                    (title.Contains("Notebook", StringComparison.OrdinalIgnoreCase) && title.Contains("Google", StringComparison.OrdinalIgnoreCase)))
+                uint pid = 0;
+                GetWindowThreadProcessId(hWnd, out pid);
+                string procName = "";
+                if (pid != 0)
                 {
-                    // Prioritize specific notebook titles over generic home titles
-                    if (title.Contains("- NotebookLM", StringComparison.OrdinalIgnoreCase) || 
-                        title.Contains("- Google NotebookLM", StringComparison.OrdinalIgnoreCase) ||
-                        title.Contains("- Notebook", StringComparison.OrdinalIgnoreCase))
+                    try
                     {
-                        bestHwnd = hWnd;
-                        bestTitle = title;
-                        return false; // Found specific notebook window!
+                        using var proc = Process.GetProcessById((int)pid);
+                        procName = proc.ProcessName.ToLowerInvariant();
                     }
+                    catch { }
+                }
 
-                    if (bestHwnd == IntPtr.Zero)
+                bool isBrowser = knownBrowsers.Any(b => procName.Contains(b));
+
+                bool isHighPriorityNotebook =
+                    title.Contains("NotebookLM", StringComparison.OrdinalIgnoreCase) ||
+                    title.Contains("Notebook LM", StringComparison.OrdinalIgnoreCase) ||
+                    (title.Contains("Notebook", StringComparison.OrdinalIgnoreCase) && title.Contains("Google", StringComparison.OrdinalIgnoreCase)) ||
+                    title.Contains("Sổ ghi chép", StringComparison.OrdinalIgnoreCase) ||
+                    title.Contains("Sổ tay", StringComparison.OrdinalIgnoreCase);
+
+                if (!isHighPriorityNotebook && !string.IsNullOrWhiteSpace(_notebookName) && _notebookName.Length > 2)
+                {
+                    if (title.Contains(_notebookName, StringComparison.OrdinalIgnoreCase))
                     {
-                        bestHwnd = hWnd;
-                        bestTitle = title;
+                        isHighPriorityNotebook = true;
                     }
                 }
+
+                if (isHighPriorityNotebook)
+                {
+                    bestHwnd = hWnd;
+                    bestTitle = title;
+                    return false; // Found NotebookLM window directly!
+                }
+
+                if (isBrowser && fallbackBrowserHwnd == IntPtr.Zero)
+                {
+                    fallbackBrowserHwnd = hWnd;
+                    fallbackBrowserTitle = title;
+                }
+
                 return true;
             }, IntPtr.Zero);
 
-            detectedTitle = bestTitle;
-            return bestHwnd;
+            if (bestHwnd != IntPtr.Zero)
+            {
+                detectedTitle = bestTitle;
+                return bestHwnd;
+            }
+
+            detectedTitle = fallbackBrowserTitle;
+            return fallbackBrowserHwnd;
         }
 
         private string ExtractNotebookName(string windowTitle, string url)
@@ -1303,7 +1341,10 @@ namespace DynamicIsland
                 }
 
                 if (!clean.Equals("NotebookLM", StringComparison.OrdinalIgnoreCase) &&
-                    !clean.Equals("Google NotebookLM", StringComparison.OrdinalIgnoreCase))
+                    !clean.Equals("Google NotebookLM", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Equals("Google", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Equals("New Tab", StringComparison.OrdinalIgnoreCase) &&
+                    !clean.Equals("Tab mới", StringComparison.OrdinalIgnoreCase))
                 {
                     return clean;
                 }
@@ -1720,6 +1761,58 @@ namespace DynamicIsland
         }
         #endregion
 
+        private Point _stagedDragStart;
+
+        private void BorderStagedSource_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.OriginalSource is DependencyObject dep && FindVisualParent<Button>(dep) != null) return;
+            _stagedDragStart = e.GetPosition(null);
+        }
+
+        private void BorderStagedSource_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed)
+            {
+                Point currentPos = e.GetPosition(null);
+                Vector diff = _stagedDragStart - currentPos;
+                if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                    Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+                {
+                    if (_currentSourceType == SourceType.File && !string.IsNullOrEmpty(_currentFilePath) && File.Exists(_currentFilePath))
+                    {
+                        var data = new DataObject();
+                        var fileDrop = new System.Collections.Specialized.StringCollection { _currentFilePath };
+                        data.SetFileDropList(fileDrop);
+                        try
+                        {
+                            var fi = new FileInfo(_currentFilePath);
+                            string ext = fi.Extension.ToLowerInvariant();
+                            if (ext == ".txt" || ext == ".md" || ext == ".csv" || ext == ".json" || ext == ".cs" || ext == ".py" || ext == ".js" || ext == ".html")
+                            {
+                                if (fi.Length <= 2 * 1024 * 1024)
+                                {
+                                    data.SetText(File.ReadAllText(_currentFilePath));
+                                }
+                            }
+                            else
+                            {
+                                data.SetText(_currentFilePath);
+                            }
+                        }
+                        catch { }
+
+                        DragDrop.DoDragDrop(BorderStagedSource, data, DragDropEffects.Copy | DragDropEffects.Move);
+                    }
+                    else if (_currentSourceType == SourceType.Link && !string.IsNullOrEmpty(_currentSourceUrl))
+                    {
+                        var data = new DataObject(DataFormats.Text, _currentSourceUrl);
+                        data.SetData(DataFormats.UnicodeText, _currentSourceUrl);
+                        DragDrop.DoDragDrop(BorderStagedSource, data, DragDropEffects.Copy);
+                    }
+                }
+            }
+        }
+
         private void Dropzone_DragOver(object sender, DragEventArgs e)
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
@@ -1762,8 +1855,13 @@ namespace DynamicIsland
 
             var fi = new FileInfo(path);
             TxtFileName.Text = fi.Name;
-            TxtFileMeta.Text = $"{fi.Length / 1024.0:F1} KB • {fi.Extension.ToUpper()} • Cập nhật: {fi.LastWriteTime:dd/MM/yyyy HH:mm}";
+            TxtFileMeta.Text = $"{fi.Length / 1024.0:F1} KB • {fi.Extension.ToUpper()} • 💡 Giữ chuột kéo khung này thả vào NotebookLM";
             BtnClearFiles.Visibility = Visibility.Visible;
+            if (BorderStagedSource != null)
+            {
+                BorderStagedSource.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#0284C7")!;
+                BorderStagedSource.Background = (Brush)new BrushConverter().ConvertFromString("#0F2238")!;
+            }
 
             string ext = fi.Extension.ToLowerInvariant();
             TxtFileIcon.Text = ext switch
@@ -1779,7 +1877,7 @@ namespace DynamicIsland
                 _ => "📁"
             };
 
-            ShowModernToast($"Đã nhận tệp: {fi.Name}", "📎", "#10B981");
+            ShowModernToast($"Đã nhận: {fi.Name} • Kéo thả vào NotebookLM!", "📎", "#10B981");
         }
 
         private void SetSelectedLink(string url)
@@ -1797,8 +1895,13 @@ namespace DynamicIsland
 
             TxtFileName.Text = url;
             TxtFileIcon.Text = (url.Contains("youtube.com") || url.Contains("youtu.be")) ? "🎬" : "🌐";
-            TxtFileMeta.Text = "Nguồn liên kết trực tuyến • Sẵn sàng add vào Sổ tay NotebookLM";
+            TxtFileMeta.Text = "Nguồn liên kết trực tuyến • Bấm 'Thêm thẳng' hoặc kéo thả vào NotebookLM";
             BtnClearFiles.Visibility = Visibility.Visible;
+            if (BorderStagedSource != null)
+            {
+                BorderStagedSource.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#0284C7")!;
+                BorderStagedSource.Background = (Brush)new BrushConverter().ConvertFromString("#0F2238")!;
+            }
 
             ShowModernToast("Đã nhận Link nguồn để add vào Sổ tay!", "🔗", "#10B981");
         }
@@ -1879,6 +1982,10 @@ namespace DynamicIsland
                             dataObject.SetText(text);
                         }
                     }
+                    else
+                    {
+                        dataObject.SetText(_currentFilePath!);
+                    }
                     Clipboard.SetDataObject(dataObject, true);
                 }
                 catch
@@ -1904,12 +2011,12 @@ namespace DynamicIsland
                 ? Path.GetFileName(_currentFilePath!)
                 : _currentSourceUrl!;
 
-            // 2. Find running NotebookLM window/tab
+            // 2. Find running NotebookLM window/tab or active browser
             IntPtr hWnd = FindNotebookLmWindow(out string windowTitle);
 
             if (hWnd != IntPtr.Zero)
             {
-                // EXISTING NOTEBOOKLM WINDOW FOUND: Bring it to front and paste directly without opening any new tab!
+                // EXISTING BROWSER/NOTEBOOKLM FOUND: Focus and bring to front without opening a new tab!
                 string detected = ExtractNotebookName(windowTitle, url);
                 if (!string.IsNullOrWhiteSpace(detected))
                 {
@@ -1921,30 +2028,41 @@ namespace DynamicIsland
                 ShowWindow(hWnd, SW_RESTORE);
                 SetForegroundWindow(hWnd);
 
-                TxtFileMeta.Text = $"⚡ Đang add thẳng nguồn vào {targetTitle}...";
-                ShowModernToast($"Đang tự động add nguồn vào {targetTitle}...", "⚡", "#10B981");
-
-                await Task.Delay(260);
-                keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
-                keybd_event(VK_V, 0, 0, UIntPtr.Zero);
-                keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
                 if (_currentSourceType == SourceType.Link)
                 {
-                    // Confirm paste dialog in NotebookLM with Enter
+                    TxtFileMeta.Text = $"⚡ Đang tự động dán link vào {targetTitle}...";
+                    ShowModernToast($"Đang tự động dán link vào {targetTitle}...", "⚡", "#10B981");
+
+                    await Task.Delay(260);
+                    keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
+                    keybd_event(VK_V, 0, 0, UIntPtr.Zero);
+                    keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
                     await Task.Delay(350);
                     keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);
                     keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                }
 
-                TxtFileMeta.Text = $"✅ Đã add thẳng vào {targetTitle}! (Không mở thêm tab)";
-                ShowModernToast($"Đã add nguồn thẳng vào {targetTitle}!", "✅", "#10B981");
+                    TxtFileMeta.Text = $"✅ Đã add link nguồn vào {targetTitle}! (Không mở thêm tab)";
+                    ShowModernToast($"Đã add link nguồn vào {targetTitle}!", "✅", "#10B981");
+                }
+                else if (_currentSourceType == SourceType.File)
+                {
+                    TxtFileMeta.Text = $"✅ Đã chuyển đến {targetTitle}! Kéo khung tệp thả vào NotebookLM để nạp nguồn";
+                    ShowModernToast($"👉 Đã mở {targetTitle}! Kéo khung tệp trên Đảo thả vào NotebookLM bên dưới!", "⚡", "#10B981");
+
+                    await Task.Delay(250);
+                    // Dispatch Ctrl+V in case user is in an open file dialog or text input
+                    keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
+                    keybd_event(VK_V, 0, 0, UIntPtr.Zero);
+                    keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                    keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                }
             }
             else
             {
-                // NO WINDOW OPEN YET: Open verified notebook link once, then inject
-                TxtFileMeta.Text = "🚀 Đang mở Sổ tay đã xác thực và chuẩn bị add nguồn...";
+                // NO BROWSER RUNNING AT ALL: Only then open browser to the verified notebook URL
+                TxtFileMeta.Text = "🚀 Đang mở Sổ tay đã xác thực...";
                 ShowModernToast("Đang mở Sổ tay NotebookLM để nạp nguồn...", "🚀", "#38BDF8");
 
                 try
@@ -1959,24 +2077,24 @@ namespace DynamicIsland
 
                 _ = Task.Run(async () =>
                 {
-                    for (int i = 0; i < 18; i++)
+                    for (int i = 0; i < 20; i++)
                     {
-                        await Task.Delay(300);
+                        await Task.Delay(400);
                         IntPtr newHwnd = FindNotebookLmWindow(out string newTitle);
                         if (newHwnd != IntPtr.Zero)
                         {
-                            await Task.Delay(1000);
+                            await Task.Delay(1200);
                             ShowWindow(newHwnd, SW_RESTORE);
                             SetForegroundWindow(newHwnd);
                             await Task.Delay(300);
 
-                            keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
-                            keybd_event(VK_V, 0, 0, UIntPtr.Zero);
-                            keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-                            keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
-
                             if (_currentSourceType == SourceType.Link)
                             {
+                                keybd_event(VK_CONTROL, 0, 0, UIntPtr.Zero);
+                                keybd_event(VK_V, 0, 0, UIntPtr.Zero);
+                                keybd_event(VK_V, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+                                keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+
                                 await Task.Delay(350);
                                 keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);
                                 keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
@@ -1990,8 +2108,8 @@ namespace DynamicIsland
                                     _notebookName = detected;
                                     TxtNotebookHeaderTitle.Text = $"NotebookLM • {_notebookName}";
                                 }
-                                TxtFileMeta.Text = "✅ Đã add nguồn vào NotebookLM thành công!";
-                                ShowModernToast("Đã tự động add nguồn vào NotebookLM!", "✅", "#10B981");
+                                TxtFileMeta.Text = "✅ Đã mở NotebookLM! Kéo thả khung tệp vào để nạp nguồn";
+                                ShowModernToast("Đã mở NotebookLM! Kéo khung tệp vào để nạp nguồn!", "✅", "#10B981");
                             });
                             break;
                         }
@@ -2005,10 +2123,15 @@ namespace DynamicIsland
             _currentSourceType = SourceType.None;
             _currentFilePath = null;
             _currentSourceUrl = null;
-            TxtFileName.Text = "Kéo thả tệp hoặc bấm 'Dán Link nguồn' (Web, YouTube, Tài liệu...)";
-            TxtFileMeta.Text = "Chưa có nguồn nào • Thả tệp hoặc dán liên kết để chuẩn bị đưa vào Sổ tay";
+            TxtFileName.Text = "Kéo thả tệp hoặc bấm '🌐 Dán Link Web / YouTube' để nạp nguồn";
+            TxtFileMeta.Text = "Chưa có nguồn tài liệu • Thả tệp hoặc dán link bài viết/video để thêm vào Sổ tay";
             TxtFileIcon.Text = "📄";
             BtnClearFiles.Visibility = Visibility.Collapsed;
+            if (BorderStagedSource != null)
+            {
+                BorderStagedSource.BorderBrush = (Brush)new BrushConverter().ConvertFromString("#1E293B")!;
+                BorderStagedSource.Background = (Brush)new BrushConverter().ConvertFromString("#0F172A")!;
+            }
         }
         #endregion
 
