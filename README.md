@@ -14,7 +14,7 @@ Featuring authentic liquid morphing, orbital multitasking satellites, realtime s
 
 <br/>
 
-[**Download Latest Release (v1.5.0)**](https://github.com/Jandz01/Dynamic-Island/releases/latest) • [**Key Features**](#-key-features) • [**Gestures & Navigation**](#-controls--gestures) • [**Growth Trends**](#-stargazers--community-growth) • [**Architecture**](#-architecture--tech-stack)
+[**Download Latest Release (v1.6.0)**](https://github.com/Jandz01/Dynamic-Island/releases/latest) • [**Key Features**](#-key-features) • [**Gestures & Navigation**](#-controls--gestures) • [**Growth Trends**](#-stargazers--community-growth) • [**Architecture**](#-architecture--tech-stack)
 
 </div>
 
@@ -32,7 +32,7 @@ Featuring authentic liquid morphing, orbital multitasking satellites, realtime s
 - **Elastic Droplet Physics**: Pulling the notch downward deforms the bottom boundary like real viscous fluid, adhering to organic tensile curves before releasing a liquid droplet straight into the planetary Black Hole.
 - **Orbital Multitasking Hub**: Expands into 6 orbiting planetary satellites representing distinct tasks:
   - 🎵 **Music & Media**
-  - 💬 **Live Notification Hub**
+  - 📅 **Schedule & Reminder Hub**
   - ⏳ **Pomodoro Focus Timer**
   - 📷 **Laptop Camera & Webcam Hub**
   - 📁 **NotebookLM File Dropzone**
@@ -62,12 +62,13 @@ Featuring authentic liquid morphing, orbital multitasking satellites, realtime s
 
 ---
 
-### 5. 🔔 Realtime Notification Hub (Facebook, Messenger & Zalo)
-- **Direct Windows Action Center SQLite Integration**: Reads incoming notifications directly from `wpndatabase.db` in real-time.
-- **Intelligent Source Separation**: Distinguishes between Facebook Web notifications, desktop Facebook, Messenger, and Zalo.
-- **Category Tabs**: Filter by `All`, `💬 Zalo`, or `📘 Facebook`.
-- **Dismiss & Reveal (`🗑️ Xóa`)**: Clear individual notifications with one click so pending notifications immediately bubble up into view.
-- **Quick Reply Bar**: Preset response chips (`👍 Ok`, `⏳ Đợi 5p`) and inline reply box.
+### 5. 📅 Calendar & Schedule Reminder Hub (Nhắc nhở lịch công việc)
+- **Interactive Monthly Calendar Picker**: Full monthly calendar popup for scheduling reminders on any custom date with flexible time presets (HH:mm, +30m, 08:00, 14:00, 20:00).
+- **Scrollable Priority Task List**: Clean list view with smooth scrolling, displaying multiple tasks with category tags (`💼 Công việc`, `📚 Học tập`, `⭐ Quan trọng`, `🏠 Cá nhân`).
+- **Drag & Drop Reordering**: Drag task cards up or down to adjust priority; or use quick 1-click `▲` / `▼` buttons.
+- **Smart Priority Badges**: Top-priority tasks automatically receive the prominent `🔥 #1` gold badge, followed by `#2`, `#3`... with persistent priority order.
+- **Dynamic Auto-Notch Alert**: Automatically expands to alert you when a task is due, then gracefully auto-hides to a compact pill on the notch bar until checked.
+- **Action Buttons**: Fast inline controls for `✓ Đã xem`, `✓ Xong` / `↩ Chưa xong`, snooze `+5p`, and delete `🗑️`.
 
 ---
 

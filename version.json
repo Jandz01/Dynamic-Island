@@ -1,6 +1,6 @@
 {
-  "version": "1.5.0",
-  "title": "Bản cập nhật Dynamic Island v1.5.0",
-  "changelog": "- Tích hợp biểu tượng Logo Cyber-Cosmic hoàn toàn mới chuẩn Windows Application Icon (.ico & .png)\n- Hoàn thiện vật lý giọt nước rơi mượt mà: đồng bộ xuất hiện Hố Đen và bung nở hành tinh\n- Sửa lỗi giọt nước chảy ngược: Đảo thu gọn về Compact mượt mà trước khi giọt nước nhỏ xuống\n- Nâng cấp nhận diện thông báo thực từ Facebook và Zalo trên Windows\n- Trả lời tin nhắn ngầm (Silent Reply) không gây chuyển tab hay phóng to/thu nhỏ trình duyệt\n- Loại bỏ triệt để hiển thị tin nhắn đi của người dùng trên đảo Compact\n- Tích hợp hệ thống tự động kiểm tra và nâng cấp phiên bản mới",
+  "version": "1.6.0",
+  "title": "Bản cập nhật Dynamic Island v1.6.0",
+  "changelog": "- Nâng cấp toàn diện hệ thống nhắc nhở lịch công việc (Calendar & Schedule Reminder System)\n- Bộ chọn lịch tương tác trực quan (Monthly Calendar Picker): chọn ngày bất kỳ, hôm nay, ngày mai, ngày kia và giờ hẹn linh hoạt\n- Hiển thị công việc dạng danh sách cuộn mượt mà (Scrollable Task List) thay cho thẻ đơn\n- Hỗ trợ Kéo - Thả (Drag & Drop) và nút bấm ▲ / ▼ để sắp xếp độ ưu tiên từ quan trọng nhất đến ít quan trọng hơn\n- Huy hiệu độ ưu tiên trực quan (🔥 #1, #2, #3...) và lưu trữ vĩnh viễn theo thứ tự\n- Tối ưu hóa hiệu năng và vòng lặp tài nguyên (giảm tải CPU/RAM, triệt tiêu hiện tượng đơ lag hay văng ứng dụng)\n- Khắc phục triệt để lỗi va chạm bố cục tại thanh trạng thái lịch nhắc",
   "downloadUrl": "https://github.com/Jandz01/Dynamic-Island/releases/latest/download/DynamicIsland.exe"
 }

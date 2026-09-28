@@ -6,6 +6,7 @@ using System.Net;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -128,10 +129,30 @@ namespace DynamicIsland
         private DateTime _bloomStartTime;
         private const double BloomDurationMs = 450.0;
 
-        // Real Windows Notification Service (wpndatabase.db)
-        private readonly RealNotificationService _realNotificationService = new();
-        private List<DynamicNotification> _realNotificationsList = new();
-        private DynamicNotification? _currentNotification = null;
+        // Calendar & Schedule Reminder System
+        private readonly List<ScheduleReminder> _remindersList = new();
+        private ScheduleReminder? _activeReminder = null;
+        private ReminderFilter _currentReminderFilter = ReminderFilter.All;
+        private int _currentReminderIndex = 0;
+        private DispatcherTimer? _reminderAutoHideTimer;
+        private bool _isAlertAutoExpanding = false;
+        private int _selectedDayOffset = 0;
+        private int _selectedCategoryIndex = 0;
+        private int _calCategoryIndex = 0;
+        private DateTime _calendarViewingMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+        private DateTime _calendarSelectedDate = DateTime.Today;
+        private int _romCheckCounter = 0;
+        private string _cachedRomPercent = "45%";
+        private string _cachedRomTooltip = "💾 Ổ đĩa hệ thống (C:)";
+        private Point _taskDragStartPoint;
+        private ScheduleReminder? _draggedReminder = null;
+        private Border? _draggedCard = null;
+        private static readonly string[] Categories = { "💼 Công việc", "📚 Học tập", "⭐ Quan trọng", "🏠 Cá nhân" };
+        private static readonly string[] DayOptions = { "📅 Hôm nay", "📅 Ngày mai", "📅 Ngày kia" };
+        private readonly string _remindersFilePath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "DynamicIsland", "reminders.json"
+        );
 
         // Viscous Liquid Rubber-Band Dragging
         private bool _isDraggingLiquid = false;
@@ -215,51 +236,19 @@ namespace DynamicIsland
                 }
             };
 
-            // Orbit Rotation (VSync hardware accelerated via CompositionTarget.Rendering)
-            CompositionTarget.Rendering += CompositionTarget_Rendering;
-
             // Pomodoro Timer (1s)
             _pomoTimer.Interval = TimeSpan.FromSeconds(1);
             _pomoTimer.Tick += PomoTimer_Tick;
 
-            // Media Position Tracker (250ms for smooth real-time progress)
+            // Media Position Tracker (250ms for smooth real-time progress, active only in Music mode)
             _mediaTrackTimer.Interval = TimeSpan.FromMilliseconds(250);
             _mediaTrackTimer.Tick += MediaTrackTimer_Tick;
-            _mediaTrackTimer.Start();
 
             // Initialize Windows Media
             await InitMediaManagerAsync();
 
-            // Load permanently deleted notification IDs & fingerprints
-            LoadDeletedNotifications();
-
-            // Initialize Real Windows Notification Service
-            _realNotificationService.IsDeletedPredicate = id => _deletedNotificationIds.Contains(id);
-            _realNotificationService.IsNotificationDeletedPredicate = r =>
-                _deletedNotificationHashes.Contains(RealNotificationService.ComputeFingerprint(r.AppName, r.Sender, r.Message));
-            _realNotificationService.DeletedNotificationHashes = _deletedNotificationHashes;
-            _realNotificationService.NotificationReceived += OnRealNotificationReceived;
-            _realNotificationService.Start();
-
-            // Start Local HTTP Webhook Server for Zalo & Facebook messages (Port 5005)
-            StartLocalMessageApiServer();
-
-            // Pre-load recent real notifications from user's system (excluding any deleted ones)
-            var recent = _realNotificationService.GetRecentNotifications(10);
-            if (recent.Count > 0)
-            {
-                _realNotificationsList = recent.Select(r => new DynamicNotification
-                {
-                    Id = r.Id,
-                    AppName = r.AppName,
-                    AppIcon = r.AppIcon,
-                    AppColor = r.AppColor,
-                    Sender = r.Sender,
-                    Message = r.Message,
-                    Time = r.Time,
-                    PrimaryId = r.PrimaryId
-                }).ToList();
-            }
+            // Initialize Calendar & Schedule Reminder System
+            LoadReminders();
 
             // Initialize NotebookLM configuration
             LoadNotebookLmConfig();
@@ -268,8 +257,8 @@ namespace DynamicIsland
             ApplyState(IslandState.Compact, animate: false);
             UpdateNotchGeometry(580, 38, 0, 0);
 
-            // Update Notification UI with loaded notifications
-            UpdateNotificationUI();
+            // Update Reminder UI with loaded tasks
+            UpdateRemindersUI();
 
             // Check if freshly updated
             string[] launchArgs = Environment.GetCommandLineArgs();
@@ -296,17 +285,21 @@ namespace DynamicIsland
 
         public void SetHorizontalOffset(double offset)
         {
-            double screenWidth = SystemParameters.PrimaryScreenWidth;
-            double maxOffset = (screenWidth - IslandCard.Width) / 2 - 20;
-            _horizontalOffset = Math.Clamp(offset, -maxOffset, maxOffset);
-
-            double desiredLeft = (screenWidth - Width) / 2 + _horizontalOffset;
-
-            var moveAnim = new DoubleAnimation(Left, desiredLeft, TimeSpan.FromMilliseconds(180))
+            try
             {
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-            };
-            BeginAnimation(LeftProperty, moveAnim);
+                double screenWidth = SystemParameters.PrimaryScreenWidth;
+                double maxOffset = Math.Max(0, (screenWidth - IslandCard.Width) / 2 - 20);
+                _horizontalOffset = Math.Clamp(offset, -maxOffset, maxOffset);
+
+                double desiredLeft = (screenWidth - Width) / 2 + _horizontalOffset;
+
+                var moveAnim = new DoubleAnimation(Left, desiredLeft, TimeSpan.FromMilliseconds(180))
+                {
+                    EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+                };
+                BeginAnimation(LeftProperty, moveAnim);
+            }
+            catch { }
         }
 
         // Lock window position (respecting user horizontal offset)
@@ -383,8 +376,13 @@ namespace DynamicIsland
                 double leftCornerEnd = E + R_bot;
                 double rightCornerStart = E + width - R_bot;
 
-                double dipLeft = Math.Clamp(sagX - dipWidth, leftCornerEnd + 8, rightCornerStart - 20);
-                double dipRight = Math.Clamp(sagX + dipWidth, dipLeft + 20, rightCornerStart - 8);
+                double minDipLeft = leftCornerEnd + 8;
+                double maxDipLeft = Math.Max(minDipLeft, rightCornerStart - 20);
+                double dipLeft = Math.Clamp(sagX - dipWidth, minDipLeft, maxDipLeft);
+
+                double minDipRight = dipLeft + 20;
+                double maxDipRight = Math.Max(minDipRight, rightCornerStart - 8);
+                double dipRight = Math.Clamp(sagX + dipWidth, minDipRight, maxDipRight);
                 double actualTipX = (dipLeft + dipRight) / 2.0;
                 double dipY = height + sagY;
 
@@ -734,34 +732,40 @@ namespace DynamicIsland
         {
             if (!_isDraggingLiquid) return;
 
-            Point cur = e.GetPosition(NotchRoot);
-            double deltaY = cur.Y - _dragStartPoint.Y;
-
-            if (deltaY > 2)
+            try
             {
-                double clampedDeltaY = Math.Max(0, deltaY);
-                // Physical elastic resistance curve: capped smoothly at max 46px
-                double factor = 1.0 - Math.Exp(-clampedDeltaY / 55.0);
-                double sagY = 46.0 * factor;
-                double extraHeight = 16.0 * factor;
+                Point cur = e.GetPosition(NotchRoot);
+                double deltaY = cur.Y - _dragStartPoint.Y;
 
-                // Localized sag follows cursor position organically within the notch width
-                double sagX = Math.Clamp(cur.X, 60, IslandCard.Width + 44 - 60);
+                if (deltaY > 2)
+                {
+                    double clampedDeltaY = Math.Max(0, deltaY);
+                    // Physical elastic resistance curve: capped smoothly at max 46px
+                    double factor = 1.0 - Math.Exp(-clampedDeltaY / 55.0);
+                    double sagY = 46.0 * factor;
+                    double extraHeight = 16.0 * factor;
 
-                _currentSagX = sagX;
-                _currentSagY = sagY;
-                _currentExtraHeight = extraHeight;
+                    // Localized sag follows cursor position organically within the notch width
+                    double minSag = Math.Min(25.0, (IslandCard.Width + 44) / 4.0);
+                    double maxSag = Math.Max(minSag, IslandCard.Width + 44 - minSag);
+                    double sagX = Math.Clamp(cur.X, minSag, maxSag);
 
-                UpdateNotchGeometry(IslandCard.Width, _initialNotchHeight, sagX, sagY);
-                IslandCard.Height = _initialNotchHeight + extraHeight;
+                    _currentSagX = sagX;
+                    _currentSagY = sagY;
+                    _currentExtraHeight = extraHeight;
+
+                    UpdateNotchGeometry(IslandCard.Width, _initialNotchHeight, sagX, sagY);
+                    IslandCard.Height = _initialNotchHeight + extraHeight;
+                }
+                else
+                {
+                    _currentSagY = 0;
+                    _currentExtraHeight = 0;
+                    UpdateNotchGeometry(IslandCard.Width, _initialNotchHeight, 0, 0);
+                    IslandCard.Height = _initialNotchHeight;
+                }
             }
-            else
-            {
-                _currentSagY = 0;
-                _currentExtraHeight = 0;
-                UpdateNotchGeometry(IslandCard.Width, _initialNotchHeight, 0, 0);
-                IslandCard.Height = _initialNotchHeight;
-            }
+            catch { }
         }
 
         private void AnimateNotchSnapBack(double startSagX, double startSagY, double startExtraHeight)
@@ -1010,6 +1014,14 @@ namespace DynamicIsland
             }
             PillClock.ToolTip = $"🕒 THỜI GIAN HỆ THỐNG\n• Giờ: {DateTime.Now:HH:mm:ss}\n• Ngày: {DateTime.Now.ToString("dddd, ngày dd/MM/yyyy", viCulture)}";
 
+            // Realtime check for due schedule reminders
+            CheckDueReminders();
+
+            if (ViewNotification != null && ViewNotification.Visibility == Visibility.Visible && TxtCurrentDateSub != null)
+            {
+                TxtCurrentDateSub.Text = DateTime.Now.ToString("dddd, dd/MM/yyyy", viCulture);
+            }
+
             // Real RAM with exact GB calculation & rich tooltip
             var memStatus = new MEMORYSTATUSEX { dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX)) };
             if (GlobalMemoryStatusEx(ref memStatus))
@@ -1021,25 +1033,30 @@ namespace DynamicIsland
                 PillRam.ToolTip = $"🧠 BỘ NHỚ RAM\n• Đang dùng: {usedRamGb:F1} GB / {totalRamGb:F1} GB ({memStatus.dwMemoryLoad}%)\n• Còn trống: {freeRamGb:F1} GB";
             }
 
-            // Real ROM (Drive C) with exact GB calculation & rich tooltip
-            try
+            // Real ROM (Drive C) with exact GB calculation & rich tooltip (queried every 30s to prevent disk I/O lag)
+            if (_romCheckCounter++ % 30 == 0)
             {
-                var drive = new DriveInfo("C");
-                double totalRom = drive.TotalSize;
-                double freeRom = drive.AvailableFreeSpace;
-                double usedRom = totalRom - freeRom;
-                int romPercent = (int)((usedRom / totalRom) * 100);
-                TxtRom.Text = $"{romPercent}%";
-                double totalRomGb = totalRom / (1024.0 * 1024.0 * 1024.0);
-                double freeRomGb = freeRom / (1024.0 * 1024.0 * 1024.0);
-                double usedRomGb = usedRom / (1024.0 * 1024.0 * 1024.0);
-                PillRom.ToolTip = $"💾 Ổ ĐĨA HỆ THỐNG (C:)\n• Đã dùng: {usedRomGb:F1} GB / {totalRomGb:F1} GB ({romPercent}%)\n• Còn trống: {freeRomGb:F1} GB";
+                try
+                {
+                    var drive = new DriveInfo("C");
+                    double totalRom = drive.TotalSize;
+                    double freeRom = drive.AvailableFreeSpace;
+                    double usedRom = totalRom - freeRom;
+                    int romPercent = (int)((usedRom / totalRom) * 100);
+                    _cachedRomPercent = $"{romPercent}%";
+                    double totalRomGb = totalRom / (1024.0 * 1024.0 * 1024.0);
+                    double freeRomGb = freeRom / (1024.0 * 1024.0 * 1024.0);
+                    double usedRomGb = usedRom / (1024.0 * 1024.0 * 1024.0);
+                    _cachedRomTooltip = $"💾 Ổ ĐĨA HỆ THỐNG (C:)\n• Đã dùng: {usedRomGb:F1} GB / {totalRomGb:F1} GB ({romPercent}%)\n• Còn trống: {freeRomGb:F1} GB";
+                }
+                catch
+                {
+                    _cachedRomPercent = "45%";
+                    _cachedRomTooltip = "💾 Ổ đĩa hệ thống (C:)";
+                }
             }
-            catch
-            {
-                TxtRom.Text = "45%";
-                PillRom.ToolTip = "💾 Ổ đĩa hệ thống (C:)";
-            }
+            TxtRom.Text = _cachedRomPercent;
+            PillRom.ToolTip = _cachedRomTooltip;
 
             // Real Battery with charging status & rich tooltip
             if (GetSystemPowerStatus(out SYSTEM_POWER_STATUS powerStatus))
@@ -2670,14 +2687,27 @@ namespace DynamicIsland
 
             FrameworkElement targetView = ViewCompact;
 
+            // Media position tracker is only needed when Music view is visible
+            if (newState == IslandState.Music)
+            {
+                _mediaTrackTimer.Start();
+            }
+            else
+            {
+                _mediaTrackTimer.Stop();
+            }
+
             if (newState == IslandState.Orbital)
             {
                 NotchRoot.Visibility = Visibility.Collapsed;
                 ViewOrbital.Visibility = Visibility.Visible;
                 targetView = ViewOrbital;
+                CompositionTarget.Rendering -= CompositionTarget_Rendering;
+                CompositionTarget.Rendering += CompositionTarget_Rendering;
             }
             else
             {
+                CompositionTarget.Rendering -= CompositionTarget_Rendering;
                 ViewOrbital.Visibility = Visibility.Collapsed;
                 NotchRoot.BeginAnimation(OpacityProperty, null);
                 NotchRoot.Opacity = 1.0;
@@ -2723,10 +2753,12 @@ namespace DynamicIsland
                         break;
 
                     case IslandState.Notification:
-                        targetWidth = 680;
-                        targetHeight = 190;
+                        targetWidth = 710;
+                        targetHeight = 245;
                         targetView = ViewNotification;
                         CardGlow.Color = (Color)ColorConverter.ConvertFromString("#0284C7");
+                        UpdateRemindersUI();
+                        RenderCalendarDays();
                         break;
 
                     case IslandState.Dropzone:
@@ -2965,119 +2997,774 @@ namespace DynamicIsland
         }
         #endregion
 
-        #region Notification & Messaging System (Facebook, Zalo, Realtime Filtering & Dismiss)
-        public enum NotificationFilter { All, Zalo, Facebook }
-        private NotificationFilter _currentFilter = NotificationFilter.All;
-        private int _currentFilteredIndex = 0;
+        #region Calendar & Schedule Reminder System
+        public enum ReminderFilter { All, Today, Upcoming, Done }
 
-        public class DynamicNotification
+        public class ScheduleReminder
         {
-            public long Id { get; set; }
-            public string AppName { get; set; } = "Zalo";
-            public string AppIcon { get; set; } = "💬";
-            public string AppColor { get; set; } = "#0068FF";
-            public string Sender { get; set; } = "Zalo";
-            public string Message { get; set; } = "";
-            public string Time { get; set; } = "Vừa xong";
-            public string? PrimaryId { get; set; }
+            public string Id { get; set; } = Guid.NewGuid().ToString("N");
+            public string Title { get; set; } = "";
+            public DateTime DueDate { get; set; }
+            public string Category { get; set; } = "💼 Công việc";
+            public bool IsCompleted { get; set; } = false;
+            public bool IsNotified { get; set; } = false;
+            public bool IsChecked { get; set; } = false;
+            public int PriorityOrder { get; set; } = 0;
+            public DateTime CreatedAt { get; set; } = DateTime.Now;
         }
 
-        public class OutboxMessage
+        private void LoadReminders()
         {
-            public long Id { get; set; }
-            public string App { get; set; } = "";
-            public string Recipient { get; set; } = "";
-            public string Message { get; set; } = "";
-            public string Time { get; set; } = "";
+            try
+            {
+                if (File.Exists(_remindersFilePath))
+                {
+                    string json = File.ReadAllText(_remindersFilePath);
+                    var items = JsonSerializer.Deserialize<List<ScheduleReminder>>(json);
+                    if (items != null)
+                    {
+                        _remindersList.Clear();
+                        bool allZero = items.Count > 1 && items.All(x => x.PriorityOrder == 0);
+                        if (allZero)
+                        {
+                            for (int i = 0; i < items.Count; i++) items[i].PriorityOrder = i;
+                        }
+                        _remindersList.AddRange(items.OrderBy(x => x.PriorityOrder));
+                    }
+                }
+                else
+                {
+                    // Seed initial sample reminders for today so user immediately sees how it works
+                    _remindersList.Clear();
+                    _remindersList.Add(new ScheduleReminder
+                    {
+                        Title = "Kiểm tra tiến độ công việc trong ngày",
+                        DueDate = DateTime.Today.AddHours(Math.Min(23, DateTime.Now.Hour + 1)),
+                        Category = "💼 Công việc",
+                        IsCompleted = false,
+                        IsNotified = false,
+                        IsChecked = false,
+                        PriorityOrder = 0
+                    });
+                    _remindersList.Add(new ScheduleReminder
+                    {
+                        Title = "Đọc tài liệu & tổng kết task",
+                        DueDate = DateTime.Today.AddHours(20),
+                        Category = "📚 Học tập",
+                        IsCompleted = false,
+                        IsNotified = false,
+                        IsChecked = false,
+                        PriorityOrder = 1
+                    });
+                    SaveReminders();
+                }
+            }
+            catch { }
         }
 
-        private readonly List<OutboxMessage> _pendingOutboxMessages = new();
-        private readonly object _outboxLock = new();
+        private void SaveReminders()
+        {
+            try
+            {
+                string? dir = Path.GetDirectoryName(_remindersFilePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                string json = JsonSerializer.Serialize(_remindersList, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_remindersFilePath, json);
+            }
+            catch { }
+        }
+
+        private List<ScheduleReminder> GetFilteredReminders()
+        {
+            var now = DateTime.Now;
+            var today = DateTime.Today;
+
+            return _currentReminderFilter switch
+            {
+                ReminderFilter.Today => _remindersList
+                    .Where(r => r.DueDate.Date == today)
+                    .OrderBy(r => r.IsCompleted)
+                    .ThenBy(r => r.PriorityOrder)
+                    .ThenBy(r => r.DueDate)
+                    .ToList(),
+
+                ReminderFilter.Upcoming => _remindersList
+                    .Where(r => r.DueDate > now && !r.IsCompleted)
+                    .OrderBy(r => r.PriorityOrder)
+                    .ThenBy(r => r.DueDate)
+                    .ToList(),
+
+                ReminderFilter.Done => _remindersList
+                    .Where(r => r.IsCompleted)
+                    .OrderBy(r => r.PriorityOrder)
+                    .ThenByDescending(r => r.DueDate)
+                    .ToList(),
+
+                _ => _remindersList
+                    .OrderBy(r => r.IsCompleted)
+                    .ThenBy(r => r.PriorityOrder)
+                    .ThenBy(r => r.DueDate)
+                    .ToList()
+            };
+        }
+
+        private ScheduleReminder? GetCurrentSelectedReminder()
+        {
+            var filtered = GetFilteredReminders();
+            if (filtered.Count == 0) return null;
+            _currentReminderIndex = Math.Clamp(_currentReminderIndex, 0, filtered.Count - 1);
+            return filtered[_currentReminderIndex];
+        }
+
+        public void UpdateRemindersUI()
+        {
+            // Update filter counters
+            int allCount = _remindersList.Count;
+            int todayCount = _remindersList.Count(r => r.DueDate.Date == DateTime.Today);
+            int upcomingCount = _remindersList.Count(r => r.DueDate > DateTime.Now && !r.IsCompleted);
+            int doneCount = _remindersList.Count(r => r.IsCompleted);
+            int pendingDueCount = _remindersList.Count(r => !r.IsCompleted && DateTime.Now >= r.DueDate);
+
+            BtnFilterAll.Content = $"Tất cả ({allCount})";
+            BtnFilterToday.Content = $"Hôm nay ({todayCount})";
+            BtnFilterUpcoming.Content = $"Sắp tới ({upcomingCount})";
+            BtnFilterDone.Content = $"Đã xong ({doneCount})";
+
+            ApplyFilterButtonStyle(BtnFilterAll, _currentReminderFilter == ReminderFilter.All);
+            ApplyFilterButtonStyle(BtnFilterToday, _currentReminderFilter == ReminderFilter.Today);
+            ApplyFilterButtonStyle(BtnFilterUpcoming, _currentReminderFilter == ReminderFilter.Upcoming);
+            ApplyFilterButtonStyle(BtnFilterDone, _currentReminderFilter == ReminderFilter.Done);
+
+            // Subtitle & badge
+            var viCulture = new CultureInfo("vi-VN");
+            TxtCurrentDateSub.Text = DateTime.Now.ToString("dddd, dd/MM/yyyy", viCulture);
+            TxtTaskBadge.Text = pendingDueCount > 0 ? $"⚡ {pendingDueCount} đến hạn" : $"{_remindersList.Count(r => !r.IsCompleted)} chờ";
+
+            // Default time placeholder in Row 2
+            TxtTimePlaceholder.Text = DateTime.Now.AddMinutes(30).ToString("HH:mm");
+
+            var filtered = GetFilteredReminders();
+            PanelTaskList.Children.Clear();
+
+            if (filtered.Count == 0)
+            {
+                ScrollTaskList.Visibility = Visibility.Collapsed;
+                BorderEmptyReminders.Visibility = Visibility.Visible;
+                TxtReminderCounter.Text = "0 task";
+            }
+            else
+            {
+                ScrollTaskList.Visibility = Visibility.Visible;
+                BorderEmptyReminders.Visibility = Visibility.Collapsed;
+                TxtReminderCounter.Text = $"{filtered.Count} task";
+
+                for (int i = 0; i < filtered.Count; i++)
+                {
+                    var card = CreateTaskCard(filtered[i], i, filtered.Count);
+                    PanelTaskList.Children.Add(card);
+                }
+            }
+
+            // Sync Compact Pill on the notch bar:
+            // Check if there is any due reminder that user hasn't checked yet
+            var unreadDue = _remindersList.FirstOrDefault(r => !r.IsCompleted && r.IsNotified && !r.IsChecked);
+            if (unreadDue != null)
+            {
+                PillCompactNotification.Visibility = Visibility.Visible;
+                TxtCompactAppIcon.Text = "⏰";
+                TxtCompactSender.Text = unreadDue.Category;
+                TxtCompactMessage.Text = $"{unreadDue.Title} ({unreadDue.DueDate:HH:mm})";
+                GlowCompactNotif.Color = Color.FromRgb(245, 158, 11);
+            }
+            else
+            {
+                // Only hide pill if no other reminder alert is currently expanding
+                if (!_isAlertAutoExpanding)
+                {
+                    PillCompactNotification.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            ClockTimer_Tick(null, EventArgs.Empty);
+        }
+
+        private void CheckDueReminders()
+        {
+            var now = DateTime.Now;
+            ScheduleReminder? dueItem = null;
+
+            foreach (var r in _remindersList)
+            {
+                if (!r.IsCompleted && !r.IsNotified && now >= r.DueDate)
+                {
+                    r.IsNotified = true;
+                    r.IsChecked = false;
+                    dueItem = r;
+                    break;
+                }
+            }
+
+            if (dueItem != null)
+            {
+                SaveReminders();
+                TriggerDynamicReminderAlert(dueItem);
+            }
+        }
+
+        private void TriggerDynamicReminderAlert(ScheduleReminder reminder)
+        {
+            _activeReminder = reminder;
+
+            // 1. Play subtle chime
+            try { System.Media.SystemSounds.Asterisk.Play(); } catch { }
+
+            // 2. Set compact reminder pill on the notch bar
+            PillCompactNotification.Visibility = Visibility.Visible;
+            TxtCompactAppIcon.Text = "⏰";
+            TxtCompactSender.Text = reminder.Category;
+            TxtCompactMessage.Text = $"{reminder.Title} ({reminder.DueDate:HH:mm})";
+            GlowCompactNotif.Color = Color.FromRgb(245, 158, 11);
+            ClockTimer_Tick(null, EventArgs.Empty);
+
+            // 3. Dynamically expand like Apple Dynamic Island if currently Compact or Mini
+            if (_currentState == IslandState.Compact || _currentState == IslandState.Mini)
+            {
+                _isAlertAutoExpanding = true;
+                _currentReminderFilter = ReminderFilter.All;
+                var filtered = GetFilteredReminders();
+                int idx = filtered.FindIndex(r => r.Id == reminder.Id);
+                if (idx >= 0) _currentReminderIndex = idx;
+
+                SwitchState(IslandState.Notification);
+                UpdateRemindersUI();
+
+                // 4. Auto-collapse after 7 seconds ("xong tự ẩn đi thông báo cho tới khi bấm vào check thông báo")
+                _reminderAutoHideTimer?.Stop();
+                _reminderAutoHideTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(7) };
+                _reminderAutoHideTimer.Tick += (s, e) =>
+                {
+                    _reminderAutoHideTimer.Stop();
+                    // If user is still in notification view and hasn't explicitly checked it yet, smoothly auto-hide back to Compact!
+                    if (_isAlertAutoExpanding && _currentState == IslandState.Notification)
+                    {
+                        _isAlertAutoExpanding = false;
+                        SwitchState(IslandState.Compact);
+                        // PillCompactNotification remains VISIBLE on the compact bar until user clicks to check!
+                    }
+                };
+                _reminderAutoHideTimer.Start();
+            }
+            else
+            {
+                // In other states (e.g. Pomodoro, Dropzone, Camera), show sleek toast HUD so user is notified without interrupting their current task
+                ShowModernToast($"⏰ Đến giờ: {reminder.Title} ({reminder.DueDate:HH:mm})", "📅", "#F59E0B");
+                UpdateRemindersUI();
+            }
+        }
 
         private void PillCompactNotification_Click(object sender, MouseButtonEventArgs e)
         {
             e.Handled = true;
+            // User explicitly clicked the notification pill to check! Stop auto-hide
+            _isAlertAutoExpanding = false;
+            _reminderAutoHideTimer?.Stop();
+
+            // Find the active or first due reminder
+            var due = _remindersList.FirstOrDefault(r => !r.IsCompleted && r.IsNotified && !r.IsChecked)
+                   ?? _remindersList.FirstOrDefault(r => !r.IsCompleted && DateTime.Now >= r.DueDate);
+
+            if (due != null)
+            {
+                _currentReminderFilter = ReminderFilter.All;
+                var filtered = GetFilteredReminders();
+                int idx = filtered.FindIndex(r => r.Id == due.Id);
+                if (idx >= 0) _currentReminderIndex = idx;
+            }
+
             SwitchState(IslandState.Notification);
+            UpdateRemindersUI();
         }
 
-        private List<DynamicNotification> GetFilteredNotifications()
+        private void BtnCheckNotification_Click(object sender, RoutedEventArgs e)
         {
-            return _currentFilter switch
+            var current = GetCurrentSelectedReminder();
+            if (current != null) CheckReminderNotification(current);
+        }
+
+        private void BtnToggleComplete_Click(object sender, RoutedEventArgs e)
+        {
+            var current = GetCurrentSelectedReminder();
+            if (current != null) ToggleReminderComplete(current);
+        }
+
+        private void BtnSnooze5_Click(object sender, RoutedEventArgs e)
+        {
+            var current = GetCurrentSelectedReminder();
+            if (current != null) SnoozeReminder(current);
+        }
+
+        private void BtnDeleteReminder_Click(object sender, RoutedEventArgs e)
+        {
+            var current = GetCurrentSelectedReminder();
+            if (current != null) DeleteReminder(current);
+        }
+
+        private void BtnPrevReminder_Click(object sender, RoutedEventArgs e)
+        {
+            var filtered = GetFilteredReminders();
+            if (filtered.Count > 0)
             {
-                NotificationFilter.Zalo => _realNotificationsList.Where(n => n.AppName.Equals("Zalo", StringComparison.OrdinalIgnoreCase) || (n.PrimaryId ?? "").Contains("zalo", StringComparison.OrdinalIgnoreCase)).ToList(),
-                NotificationFilter.Facebook => _realNotificationsList.Where(n => n.AppName.Equals("Facebook", StringComparison.OrdinalIgnoreCase) || (n.PrimaryId ?? "").Contains("facebook", StringComparison.OrdinalIgnoreCase)).ToList(),
-                _ => _realNotificationsList
+                _currentReminderIndex = (_currentReminderIndex - 1 + filtered.Count) % filtered.Count;
+                UpdateRemindersUI();
+            }
+        }
+
+        private void BtnNextReminder_Click(object sender, RoutedEventArgs e)
+        {
+            var filtered = GetFilteredReminders();
+            if (filtered.Count > 0)
+            {
+                _currentReminderIndex = (_currentReminderIndex + 1) % filtered.Count;
+                UpdateRemindersUI();
+            }
+        }
+
+        private void CheckReminderNotification(ScheduleReminder item)
+        {
+            _reminderAutoHideTimer?.Stop();
+            _isAlertAutoExpanding = false;
+
+            item.IsChecked = true;
+            SaveReminders();
+            UpdateRemindersUI();
+            ShowModernToast($"✓ Đã kiểm tra lịch nhắc: {item.Title}!", "📅", "#10B981");
+        }
+
+        private void ToggleReminderComplete(ScheduleReminder item)
+        {
+            _reminderAutoHideTimer?.Stop();
+            _isAlertAutoExpanding = false;
+
+            item.IsCompleted = !item.IsCompleted;
+            item.IsChecked = true;
+            SaveReminders();
+            UpdateRemindersUI();
+            ShowModernToast(item.IsCompleted ? "✓ Đã hoàn thành công việc!" : "Đã chuyển về chưa hoàn thành", "✓", "#10B981");
+        }
+
+        private void SnoozeReminder(ScheduleReminder item)
+        {
+            _reminderAutoHideTimer?.Stop();
+            _isAlertAutoExpanding = false;
+
+            item.DueDate = DateTime.Now.AddMinutes(5);
+            item.IsNotified = false;
+            item.IsChecked = false;
+            SaveReminders();
+            UpdateRemindersUI();
+            ShowModernToast($"⏰ Đã hoãn báo lại sau 5 phút ({item.DueDate:HH:mm})", "⏰", "#38BDF8");
+        }
+
+        private void DeleteReminder(ScheduleReminder item)
+        {
+            _reminderAutoHideTimer?.Stop();
+            _isAlertAutoExpanding = false;
+
+            _remindersList.Remove(item);
+            ReindexPriorities();
+            UpdateRemindersUI();
+            ShowModernToast("🗑️ Đã xóa lịch nhắc!", "🗑️", "#EF4444");
+        }
+
+        private void MoveReminderPriority(ScheduleReminder source, ScheduleReminder target)
+        {
+            int srcIdx = _remindersList.FindIndex(r => r.Id == source.Id);
+            int tgtIdx = _remindersList.FindIndex(r => r.Id == target.Id);
+            if (srcIdx >= 0 && tgtIdx >= 0 && srcIdx != tgtIdx)
+            {
+                _remindersList.RemoveAt(srcIdx);
+                _remindersList.Insert(tgtIdx, source);
+                ReindexPriorities();
+                UpdateRemindersUI();
+                ShowModernToast($"⭐ Đã đổi thứ tự ưu tiên: \"{source.Title}\"", "↕", "#38BDF8");
+            }
+        }
+
+        private void MoveReminderUp(ScheduleReminder item)
+        {
+            var filtered = GetFilteredReminders();
+            int idx = filtered.FindIndex(r => r.Id == item.Id);
+            if (idx > 0)
+            {
+                MoveReminderPriority(item, filtered[idx - 1]);
+            }
+        }
+
+        private void MoveReminderDown(ScheduleReminder item)
+        {
+            var filtered = GetFilteredReminders();
+            int idx = filtered.FindIndex(r => r.Id == item.Id);
+            if (idx >= 0 && idx < filtered.Count - 1)
+            {
+                MoveReminderPriority(item, filtered[idx + 1]);
+            }
+        }
+
+        private void ReindexPriorities()
+        {
+            for (int i = 0; i < _remindersList.Count; i++)
+            {
+                _remindersList[i].PriorityOrder = i;
+            }
+            SaveReminders();
+        }
+
+        private Border CreateTaskCard(ScheduleReminder item, int displayIndex, int totalCount)
+        {
+            var card = new Border
+            {
+                Background = new SolidColorBrush(item.IsCompleted 
+                    ? Color.FromArgb(180, 15, 23, 42)
+                    : (DateTime.Now >= item.DueDate ? Color.FromArgb(210, 30, 20, 30) : Color.FromArgb(220, 18, 24, 38))),
+                BorderBrush = new SolidColorBrush(item.IsCompleted 
+                    ? Color.FromRgb(30, 41, 59) 
+                    : (DateTime.Now >= item.DueDate ? Color.FromRgb(239, 68, 68) : Color.FromRgb(30, 41, 59))),
+                BorderThickness = new Thickness(1.2),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(7, 5, 7, 5),
+                Margin = new Thickness(0, 0, 0, 4),
+                Tag = item,
+                AllowDrop = true
             };
-        }
 
-        public void UpdateNotificationUI()
-        {
-            // Update filter buttons counter text
-            int allCount = _realNotificationsList.Count;
-            int zaloCount = _realNotificationsList.Count(n => n.AppName.Equals("Zalo", StringComparison.OrdinalIgnoreCase) || (n.PrimaryId ?? "").Contains("zalo", StringComparison.OrdinalIgnoreCase));
-            int fbCount = _realNotificationsList.Count(n => n.AppName.Equals("Facebook", StringComparison.OrdinalIgnoreCase) || (n.PrimaryId ?? "").Contains("facebook", StringComparison.OrdinalIgnoreCase));
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-            BtnFilterAll.Content = $"Tất cả ({allCount})";
-            BtnFilterZalo.Content = $"💬 Zalo ({zaloCount})";
-            BtnFilterFacebook.Content = $"📘 Facebook ({fbCount})";
+            // --- Column 0: Left side controls (Drag grip, ▲/▼, Priority badge, Category) ---
+            var leftPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
 
-            ApplyFilterButtonStyle(BtnFilterAll, _currentFilter == NotificationFilter.All);
-            ApplyFilterButtonStyle(BtnFilterZalo, _currentFilter == NotificationFilter.Zalo);
-            ApplyFilterButtonStyle(BtnFilterFacebook, _currentFilter == NotificationFilter.Facebook);
-
-            var filtered = GetFilteredNotifications();
-            if (filtered.Count == 0)
+            var grip = new TextBlock
             {
-                _currentNotification = null;
-                BorderMsgBubble.Visibility = Visibility.Collapsed;
-                BorderEmptyState.Visibility = Visibility.Visible;
-                GridReplyBar.Visibility = Visibility.Collapsed;
-                TxtNotifySender.Text = "Đã xem hết";
-                TxtAppTag.Text = _currentFilter == NotificationFilter.Zalo ? "Zalo" : _currentFilter == NotificationFilter.Facebook ? "Facebook" : "Hệ thống";
-                TxtNotifyTime.Text = "Không còn thông báo chờ";
-                TxtNotifCounter.Text = "0/0";
-                PillCompactNotification.Visibility = Visibility.Collapsed;
-                return;
+                Text = "⠿",
+                Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139)),
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 4, 0),
+                Cursor = Cursors.SizeAll,
+                ToolTip = "Kéo lên/xuống để đổi độ ưu tiên"
+            };
+            leftPanel.Children.Add(grip);
+
+            var btnUp = new Button
+            {
+                Content = "▲",
+                FontSize = 8,
+                Padding = new Thickness(2, 0, 2, 0),
+                Margin = new Thickness(0, 0, 2, 0),
+                Background = new SolidColorBrush(Color.FromRgb(30, 41, 59)),
+                Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                ToolTip = "Tăng ưu tiên (chuyển lên trên)",
+                Visibility = displayIndex > 0 ? Visibility.Visible : Visibility.Hidden
+            };
+            btnUp.Click += (s, e) => MoveReminderUp(item);
+            leftPanel.Children.Add(btnUp);
+
+            var btnDown = new Button
+            {
+                Content = "▼",
+                FontSize = 8,
+                Padding = new Thickness(2, 0, 2, 0),
+                Margin = new Thickness(0, 0, 4, 0),
+                Background = new SolidColorBrush(Color.FromRgb(30, 41, 59)),
+                Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)),
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                ToolTip = "Giảm ưu tiên (chuyển xuống dưới)",
+                Visibility = displayIndex < totalCount - 1 ? Visibility.Visible : Visibility.Hidden
+            };
+            btnDown.Click += (s, e) => MoveReminderDown(item);
+            leftPanel.Children.Add(btnDown);
+
+            bool isTopPriority = displayIndex == 0 && !item.IsCompleted;
+            var badgePriority = new Border
+            {
+                Background = new SolidColorBrush(isTopPriority ? Color.FromRgb(120, 53, 15) : Color.FromRgb(30, 41, 59)),
+                BorderBrush = new SolidColorBrush(isTopPriority ? Color.FromRgb(245, 158, 11) : Color.FromRgb(51, 65, 85)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(5),
+                Padding = new Thickness(5, 1, 5, 1),
+                Margin = new Thickness(0, 0, 4, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = $"Mức ưu tiên #{displayIndex + 1}"
+            };
+            var txtPriority = new TextBlock
+            {
+                Text = isTopPriority ? "🔥 #1" : $"#{displayIndex + 1}",
+                FontSize = 9.5,
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(isTopPriority ? Color.FromRgb(254, 240, 138) : Color.FromRgb(148, 163, 184))
+            };
+            badgePriority.Child = txtPriority;
+            leftPanel.Children.Add(badgePriority);
+
+            Color catBorder = Color.FromRgb(56, 189, 248);
+            Color catFg = Color.FromRgb(56, 189, 248);
+            if (item.Category.Contains("Quan trọng"))
+            {
+                catBorder = Color.FromRgb(244, 63, 94);
+                catFg = Color.FromRgb(251, 113, 133);
+            }
+            else if (item.Category.Contains("Học tập"))
+            {
+                catBorder = Color.FromRgb(168, 85, 247);
+                catFg = Color.FromRgb(192, 132, 252);
+            }
+            else if (item.Category.Contains("Cá nhân"))
+            {
+                catBorder = Color.FromRgb(16, 185, 129);
+                catFg = Color.FromRgb(52, 211, 153);
             }
 
-            BorderMsgBubble.Visibility = Visibility.Visible;
-            BorderEmptyState.Visibility = Visibility.Collapsed;
-            GridReplyBar.Visibility = Visibility.Visible;
-
-            _currentFilteredIndex = Math.Clamp(_currentFilteredIndex, 0, filtered.Count - 1);
-            var notif = filtered[_currentFilteredIndex];
-            _currentNotification = notif;
-
-            try
+            var badgeCat = new Border
             {
-                BadgeAppIcon.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(notif.AppColor));
-                BadgeAppGlow.Color = (Color)ColorConverter.ConvertFromString(notif.AppColor);
-                GlowCompactNotif.Color = (Color)ColorConverter.ConvertFromString(notif.AppColor);
-            }
-            catch
+                Background = new SolidColorBrush(Color.FromRgb(30, 41, 59)),
+                BorderBrush = new SolidColorBrush(catBorder),
+                BorderThickness = new Thickness(0.8),
+                CornerRadius = new CornerRadius(5),
+                Padding = new Thickness(4, 1, 4, 1),
+                Margin = new Thickness(0, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            badgeCat.Child = new TextBlock
             {
-                BadgeAppIcon.Background = new SolidColorBrush(Color.FromRgb(2, 132, 199));
+                Text = item.Category,
+                FontSize = 9.5,
+                Foreground = new SolidColorBrush(catFg)
+            };
+            leftPanel.Children.Add(badgeCat);
+
+            Grid.SetColumn(leftPanel, 0);
+            grid.Children.Add(leftPanel);
+
+            // --- Column 1: Task Title & Subtext ---
+            var centerPanel = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+
+            var txtTitle = new TextBlock
+            {
+                Text = item.Title,
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxWidth = 310
+            };
+            if (item.IsCompleted)
+            {
+                txtTitle.Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139));
+                txtTitle.TextDecorations = TextDecorations.Strikethrough;
+            }
+            else if (DateTime.Now >= item.DueDate)
+            {
+                txtTitle.Foreground = new SolidColorBrush(Color.FromRgb(252, 165, 165));
+            }
+            else
+            {
+                txtTitle.Foreground = new SolidColorBrush(Color.FromRgb(248, 250, 252));
+            }
+            centerPanel.Children.Add(txtTitle);
+
+            string dateStr = item.DueDate.Date == DateTime.Today ? "Hôm nay"
+                : item.DueDate.Date == DateTime.Today.AddDays(1) ? "Ngày mai"
+                : item.DueDate.Date == DateTime.Today.AddDays(2) ? "Ngày kia"
+                : item.DueDate.ToString("dd/MM");
+
+            string statusStr;
+            Color statusColor;
+
+            if (item.IsCompleted)
+            {
+                statusStr = $"✓ Đã xong ({item.DueDate:HH:mm})";
+                statusColor = Color.FromRgb(16, 185, 129);
+            }
+            else if (DateTime.Now >= item.DueDate)
+            {
+                var diff = DateTime.Now - item.DueDate;
+                string diffStr = diff.TotalHours >= 1 ? $"{(int)diff.TotalHours}h {diff.Minutes}p" : $"{Math.Max(1, (int)diff.TotalMinutes)}p";
+                statusStr = $"⏰ Quá hạn {diffStr} ({item.DueDate:HH:mm})";
+                statusColor = Color.FromRgb(248, 113, 113);
+            }
+            else
+            {
+                var diff = item.DueDate - DateTime.Now;
+                string diffStr = diff.TotalDays >= 1 ? $"{(int)diff.TotalDays}d {(int)diff.Hours}h"
+                    : diff.TotalHours >= 1 ? $"{(int)diff.TotalHours}h {diff.Minutes}p"
+                    : $"{Math.Max(1, (int)diff.TotalMinutes)}p";
+                statusStr = $"📅 {dateStr} • ⏰ {item.DueDate:HH:mm} (còn {diffStr})";
+                statusColor = Color.FromRgb(100, 116, 139);
             }
 
-            TxtAppIcon.Text = notif.AppIcon;
-            TxtAppTag.Text = notif.AppName;
-            TxtNotifySender.Text = notif.Sender;
-            TxtNotifyTime.Text = $"{notif.Time} • Thời gian thực";
-            TxtNotifyContent.Text = notif.Message;
-            TxtNotifCounter.Text = $"{_currentFilteredIndex + 1}/{filtered.Count}";
-            InputReply.Text = "";
-
-            // Update compact notification ticker on the notch bar
-            PillCompactNotification.Visibility = Visibility.Visible;
-            TxtCompactAppIcon.Text = notif.AppIcon;
-            TxtCompactSender.Text = notif.Sender;
-            TxtCompactMessage.Text = notif.Message;
-            try
+            centerPanel.Children.Add(new TextBlock
             {
-                GlowCompactNotif.Color = (Color)ColorConverter.ConvertFromString(notif.AppColor);
+                Text = statusStr,
+                FontSize = 9.5,
+                Foreground = new SolidColorBrush(statusColor),
+                Margin = new Thickness(0, 1, 0, 0)
+            });
+
+            Grid.SetColumn(centerPanel, 1);
+            grid.Children.Add(centerPanel);
+
+            // --- Column 2: Right Actions ---
+            var rightPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            if (!item.IsCompleted && DateTime.Now >= item.DueDate && !item.IsChecked)
+            {
+                var btnCheck = new Button
+                {
+                    Content = "✓ Đã xem",
+                    FontSize = 10,
+                    FontWeight = FontWeights.Bold,
+                    Background = new SolidColorBrush(Color.FromRgb(245, 158, 11)),
+                    Foreground = Brushes.White,
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(0, 0, 4, 0),
+                    Cursor = Cursors.Hand,
+                    ToolTip = "Đã xem thông báo nhắc việc này"
+                };
+                btnCheck.Click += (s, e) => CheckReminderNotification(item);
+                rightPanel.Children.Add(btnCheck);
             }
-            catch { }
-            ClockTimer_Tick(null, EventArgs.Empty);
+
+            var btnToggle = new Button
+            {
+                Content = item.IsCompleted ? "↩" : "✓",
+                FontSize = 10.5,
+                FontWeight = FontWeights.Bold,
+                Background = new SolidColorBrush(item.IsCompleted ? Color.FromRgb(30, 41, 59) : Color.FromRgb(16, 185, 129)),
+                Foreground = Brushes.White,
+                Padding = new Thickness(6, 2, 6, 2),
+                Margin = new Thickness(0, 0, 3, 0),
+                Cursor = Cursors.Hand,
+                ToolTip = item.IsCompleted ? "Đánh dấu chưa hoàn thành" : "Hoàn thành công việc này"
+            };
+            btnToggle.Click += (s, e) => ToggleReminderComplete(item);
+            rightPanel.Children.Add(btnToggle);
+
+            if (!item.IsCompleted)
+            {
+                var btnSnooze = new Button
+                {
+                    Content = "+5p",
+                    FontSize = 9.5,
+                    Background = new SolidColorBrush(Color.FromRgb(30, 41, 59)),
+                    Foreground = new SolidColorBrush(Color.FromRgb(56, 189, 248)),
+                    Padding = new Thickness(4, 2, 4, 2),
+                    Margin = new Thickness(0, 0, 3, 0),
+                    Cursor = Cursors.Hand,
+                    ToolTip = "Hoãn báo lại 5 phút"
+                };
+                btnSnooze.Click += (s, e) => SnoozeReminder(item);
+                rightPanel.Children.Add(btnSnooze);
+            }
+
+            var btnDel = new Button
+            {
+                Content = "🗑️",
+                FontSize = 9.5,
+                Background = Brushes.Transparent,
+                Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)),
+                Padding = new Thickness(3, 2, 3, 2),
+                Cursor = Cursors.Hand,
+                ToolTip = "Xóa công việc này"
+            };
+            btnDel.Click += (s, e) => DeleteReminder(item);
+            rightPanel.Children.Add(btnDel);
+
+            Grid.SetColumn(rightPanel, 2);
+            grid.Children.Add(rightPanel);
+
+            card.Child = grid;
+
+            // Wire drag-and-drop
+            card.PreviewMouseLeftButtonDown += (s, e) =>
+            {
+                if (e.OriginalSource is DependencyObject dep && FindVisualParent<Button>(dep) != null) return;
+                _taskDragStartPoint = e.GetPosition(null);
+                _draggedReminder = item;
+                _draggedCard = card;
+            };
+
+            card.PreviewMouseMove += (s, e) =>
+            {
+                if (e.LeftButton == MouseButtonState.Pressed && _draggedReminder == item && _draggedCard == card)
+                {
+                    Point curPos = e.GetPosition(null);
+                    Vector diff = _taskDragStartPoint - curPos;
+                    if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                        Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+                    {
+                        card.Opacity = 0.45;
+                        var data = new DataObject("ScheduleReminder", item);
+                        DragDrop.DoDragDrop(card, data, DragDropEffects.Move);
+                        card.Opacity = 1.0;
+                        _draggedReminder = null;
+                        _draggedCard = null;
+                    }
+                }
+            };
+
+            card.DragOver += (s, e) =>
+            {
+                if (e.Data.GetDataPresent("ScheduleReminder"))
+                {
+                    e.Effects = DragDropEffects.Move;
+                    card.BorderBrush = new SolidColorBrush(Color.FromRgb(56, 189, 248));
+                    e.Handled = true;
+                }
+            };
+
+            card.DragLeave += (s, e) =>
+            {
+                card.BorderBrush = new SolidColorBrush(item.IsCompleted 
+                    ? Color.FromRgb(30, 41, 59) 
+                    : (DateTime.Now >= item.DueDate ? Color.FromRgb(239, 68, 68) : Color.FromRgb(30, 41, 59)));
+            };
+
+            card.Drop += (s, e) =>
+            {
+                if (e.Data.GetDataPresent("ScheduleReminder"))
+                {
+                    var source = e.Data.GetData("ScheduleReminder") as ScheduleReminder;
+                    var target = card.Tag as ScheduleReminder;
+                    if (source != null && target != null && source.Id != target.Id)
+                    {
+                        MoveReminderPriority(source, target);
+                    }
+                }
+                card.BorderBrush = new SolidColorBrush(item.IsCompleted 
+                    ? Color.FromRgb(30, 41, 59) 
+                    : (DateTime.Now >= item.DueDate ? Color.FromRgb(239, 68, 68) : Color.FromRgb(30, 41, 59)));
+                e.Handled = true;
+            };
+
+            return card;
         }
 
         private void ApplyFilterButtonStyle(Button btn, bool isActive)
@@ -3098,509 +3785,444 @@ namespace DynamicIsland
 
         private void BtnFilterAll_Click(object sender, RoutedEventArgs e)
         {
-            _currentFilter = NotificationFilter.All;
-            _currentFilteredIndex = 0;
-            UpdateNotificationUI();
+            _currentReminderFilter = ReminderFilter.All;
+            _currentReminderIndex = 0;
+            UpdateRemindersUI();
         }
 
-        private void BtnFilterZalo_Click(object sender, RoutedEventArgs e)
+        private void BtnFilterToday_Click(object sender, RoutedEventArgs e)
         {
-            _currentFilter = NotificationFilter.Zalo;
-            _currentFilteredIndex = 0;
-            UpdateNotificationUI();
+            _currentReminderFilter = ReminderFilter.Today;
+            _currentReminderIndex = 0;
+            UpdateRemindersUI();
         }
 
-        private void BtnFilterFacebook_Click(object sender, RoutedEventArgs e)
+        private void BtnFilterUpcoming_Click(object sender, RoutedEventArgs e)
         {
-            _currentFilter = NotificationFilter.Facebook;
-            _currentFilteredIndex = 0;
-            UpdateNotificationUI();
+            _currentReminderFilter = ReminderFilter.Upcoming;
+            _currentReminderIndex = 0;
+            UpdateRemindersUI();
         }
 
-        private void LoadDeletedNotifications()
+        private void BtnFilterDone_Click(object sender, RoutedEventArgs e)
         {
-            try
+            _currentReminderFilter = ReminderFilter.Done;
+            _currentReminderIndex = 0;
+            UpdateRemindersUI();
+        }
+
+        private void BtnTaskDay_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedDayOffset = (_selectedDayOffset + 1) % DayOptions.Length;
+            BtnTaskDay.Content = DayOptions[_selectedDayOffset];
+        }
+
+        private void BtnTaskCategory_Click(object sender, RoutedEventArgs e)
+        {
+            _selectedCategoryIndex = (_selectedCategoryIndex + 1) % Categories.Length;
+            BtnTaskCategory.Content = Categories[_selectedCategoryIndex];
+        }
+
+        private void QuickTimePreset_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button btn && btn.Content != null)
             {
-                if (File.Exists(_deletedNotifsPath))
-                {
-                    var lines = File.ReadAllLines(_deletedNotifsPath);
-                    foreach (var line in lines)
-                    {
-                        if (long.TryParse(line.Trim(), out long id))
-                        {
-                            _deletedNotificationIds.Add(id);
-                        }
-                    }
-                }
-                if (File.Exists(_deletedNotifHashesPath))
-                {
-                    var lines = File.ReadAllLines(_deletedNotifHashesPath);
-                    foreach (var line in lines)
-                    {
-                        string trimmed = line.Trim();
-                        if (!string.IsNullOrEmpty(trimmed))
-                        {
-                            _deletedNotificationHashes.Add(trimmed);
-                        }
-                    }
-                }
-            }
-            catch { }
-        }
+                string text = btn.Content.ToString() ?? "";
+                DateTime target = DateTime.Now;
+                if (text.Contains("15")) target = target.AddMinutes(15);
+                else if (text.Contains("30")) target = target.AddMinutes(30);
+                else if (text.Contains("1h")) target = target.AddHours(1);
 
-        private void SaveDeletedNotifications()
-        {
-            try
-            {
-                string dir = Path.GetDirectoryName(_deletedNotifsPath)!;
-                if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                File.WriteAllLines(_deletedNotifsPath, _deletedNotificationIds.Select(id => id.ToString()));
-                File.WriteAllLines(_deletedNotifHashesPath, _deletedNotificationHashes);
-            }
-            catch { }
-        }
-
-        private void BtnDeleteNotification_Click(object sender, RoutedEventArgs e)
-        {
-            if (_currentNotification != null)
-            {
-                long id = _currentNotification.Id;
-                string hash = RealNotificationService.ComputeFingerprint(_currentNotification.AppName, _currentNotification.Sender, _currentNotification.Message);
-
-                _deletedNotificationIds.Add(id);
-                _deletedNotificationHashes.Add(hash);
-                SaveDeletedNotifications();
-
-                _realNotificationsList.RemoveAll(n => n.Id == id || RealNotificationService.ComputeFingerprint(n.AppName, n.Sender, n.Message) == hash);
-                var filtered = GetFilteredNotifications();
-                if (_currentFilteredIndex >= filtered.Count)
-                {
-                    _currentFilteredIndex = Math.Max(0, filtered.Count - 1);
-                }
-                UpdateNotificationUI();
-                ShowModernToast("Đã xóa vĩnh viễn thông báo này!", "🗑️", "#EF4444");
+                InputTaskTime.Text = target.ToString("HH:mm");
+                _selectedDayOffset = 0;
+                BtnTaskDay.Content = DayOptions[0];
             }
         }
 
-        private void BtnPrevNotif_Click(object sender, RoutedEventArgs e)
+        private void InputTaskTitle_TextChanged(object sender, TextChangedEventArgs e)
         {
-            var filtered = GetFilteredNotifications();
-            if (filtered.Count > 0)
-            {
-                _currentFilteredIndex = (_currentFilteredIndex - 1 + filtered.Count) % filtered.Count;
-                UpdateNotificationUI();
-            }
+            TxtTaskTitlePlaceholder.Visibility = string.IsNullOrEmpty(InputTaskTitle.Text) ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void BtnNextNotif_Click(object sender, RoutedEventArgs e)
+        private void InputTaskTime_TextChanged(object sender, TextChangedEventArgs e)
         {
-            var filtered = GetFilteredNotifications();
-            if (filtered.Count > 0)
-            {
-                _currentFilteredIndex = (_currentFilteredIndex + 1) % filtered.Count;
-                UpdateNotificationUI();
-            }
+            TxtTimePlaceholder.Visibility = string.IsNullOrEmpty(InputTaskTime.Text) ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void OnRealNotificationReceived(RealNotification r)
-        {
-            Dispatcher.InvokeAsync(() =>
-            {
-                string hash = RealNotificationService.ComputeFingerprint(r.AppName, r.Sender, r.Message);
-                if (_deletedNotificationIds.Contains(r.Id) || _deletedNotificationHashes.Contains(hash)) return; // Ignore if deleted!
-
-                var notif = new DynamicNotification
-                {
-                    Id = r.Id,
-                    AppName = r.AppName,
-                    AppIcon = r.AppIcon,
-                    AppColor = r.AppColor,
-                    Sender = r.Sender,
-                    Message = r.Message,
-                    Time = r.Time,
-                    PrimaryId = r.PrimaryId
-                };
-
-                // Avoid duplicate
-                if (!_realNotificationsList.Any(n => n.Id == notif.Id || RealNotificationService.ComputeFingerprint(n.AppName, n.Sender, n.Message) == hash))
-                {
-                    _realNotificationsList.Insert(0, notif);
-                }
-
-                // If currently filtered by specific app, match filter
-                if (_currentFilter == NotificationFilter.Zalo && !notif.AppName.Equals("Zalo", StringComparison.OrdinalIgnoreCase))
-                {
-                    _currentFilter = NotificationFilter.All;
-                }
-                else if (_currentFilter == NotificationFilter.Facebook && !notif.AppName.Equals("Facebook", StringComparison.OrdinalIgnoreCase))
-                {
-                    _currentFilter = NotificationFilter.All;
-                }
-
-                _currentFilteredIndex = 0;
-                UpdateNotificationUI();
-
-                if (_currentState == IslandState.Compact || _currentState == IslandState.Mini)
-                {
-                    SwitchState(IslandState.Notification);
-                }
-            });
-        }
-
-        public void ShowNotification(DynamicNotification notif)
-        {
-            string hash = RealNotificationService.ComputeFingerprint(notif.AppName, notif.Sender, notif.Message);
-            if (_deletedNotificationIds.Contains(notif.Id) || _deletedNotificationHashes.Contains(hash)) return;
-
-            if (!_realNotificationsList.Any(n => n.Id == notif.Id || RealNotificationService.ComputeFingerprint(n.AppName, n.Sender, n.Message) == hash))
-            {
-                _realNotificationsList.Insert(0, notif);
-            }
-            _currentFilteredIndex = 0;
-            UpdateNotificationUI();
-            SwitchState(IslandState.Notification);
-        }
-
-        #region Local HTTP Webhook Server for Facebook & Zalo Messages
-        private HttpListener? _httpServer;
-        private CancellationTokenSource? _serverCts;
-
-        private void StartLocalMessageApiServer()
-        {
-            try
-            {
-                _serverCts = new CancellationTokenSource();
-                _httpServer = new HttpListener();
-                _httpServer.Prefixes.Add("http://127.0.0.1:5005/api/");
-                _httpServer.Start();
-
-                Task.Run(() => ListenForApiRequestsAsync(_serverCts.Token));
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"Local API Server start error: {ex.Message}");
-            }
-        }
-
-        private async Task ListenForApiRequestsAsync(CancellationToken token)
-        {
-            while (!token.IsCancellationRequested && _httpServer != null && _httpServer.IsListening)
-            {
-                try
-                {
-                    var ctx = await _httpServer.GetContextAsync();
-                    _ = ProcessApiRequestAsync(ctx);
-                }
-                catch when (token.IsCancellationRequested)
-                {
-                    break;
-                }
-                catch { }
-            }
-        }
-
-        private async Task ProcessApiRequestAsync(HttpListenerContext ctx)
-        {
-            var req = ctx.Request;
-            var res = ctx.Response;
-
-            // Enable Full Cross-Origin Resource Sharing (CORS) & Chrome Private Network Access (PNA)
-            res.Headers.Add("Access-Control-Allow-Origin", "*");
-            res.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-            res.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Access-Control-Allow-Private-Network, *");
-            res.Headers.Add("Access-Control-Allow-Private-Network", "true");
-            res.Headers.Add("Access-Control-Max-Age", "86400");
-
-            if (req.HttpMethod == "OPTIONS")
-            {
-                res.StatusCode = 204;
-                res.Close();
-                return;
-            }
-
-            try
-            {
-                string path = req.Url?.AbsolutePath.ToLowerInvariant() ?? "";
-
-                // Interactive Test Endpoint: visiting in browser triggers test alert and displays web dashboard
-                if (path.EndsWith("/test") || path.Contains("/test/"))
-                {
-                    string testApp = path.Contains("zalo") ? "Zalo" : (path.Contains("facebook") ? "Facebook" : "Facebook & Zalo");
-                    string testSender = path.Contains("zalo") ? "Zalo Test" : "Facebook Test";
-                    string testMsg = path.Contains("zalo")
-                        ? "💬 Tin nhắn Zalo test kết nối thành công vào Dynamic Island!"
-                        : "📘 Tin nhắn Facebook test kết nối thành công vào Dynamic Island!";
-
-                    bool isZalo = testApp.Contains("Zalo");
-                    var testNotif = new DynamicNotification
-                    {
-                        Id = DateTime.Now.Ticks,
-                        AppName = isZalo ? "Zalo" : "Facebook",
-                        AppIcon = isZalo ? "💬" : "📘",
-                        AppColor = isZalo ? "#0068FF" : "#1877F2",
-                        Sender = testSender,
-                        Message = testMsg,
-                        Time = "Vừa xong",
-                        PrimaryId = isZalo ? "com.vng.zalo" : "facebook"
-                    };
-
-                    await Dispatcher.InvokeAsync(() =>
-                    {
-                        ShowNotification(testNotif);
-                    });
-
-                    string html = @"<!DOCTYPE html>
-<html lang=""vi"">
-<head>
-  <meta charset=""utf-8""/>
-  <meta name=""viewport"" content=""width=device-width, initial-scale=1""/>
-  <title>Dynamic Island Message Bridge</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0f19; color: #f1f5f9; padding: 40px 20px; text-align: center; }
-    .card { max-width: 600px; margin: 0 auto; background: #1e293b; border-radius: 20px; padding: 36px; box-shadow: 0 20px 40px rgba(0,0,0,0.6); border: 1px solid #334155; }
-    h1 { color: #38bdf8; margin: 12px 0; font-size: 24px; }
-    .badge { display: inline-block; padding: 6px 16px; background: #064e3b; color: #34d399; border-radius: 999px; font-size: 13px; font-weight: 700; letter-spacing: 0.5px; }
-    p { color: #94a3b8; font-size: 14px; line-height: 1.6; }
-    .btn-group { margin: 28px 0; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
-    .btn { padding: 12px 24px; border-radius: 12px; font-weight: 600; text-decoration: none; color: white; display: inline-block; font-size: 14px; transition: transform 0.15s, opacity 0.15s; }
-    .btn:hover { transform: translateY(-2px); opacity: 0.95; }
-    .btn-fb { background: #1877f2; }
-    .btn-zalo { background: #0068ff; }
-    .status-box { background: #0f172a; border-radius: 12px; padding: 16px; margin-top: 24px; text-align: left; font-family: monospace; font-size: 13px; color: #38bdf8; }
-  </style>
-</head>
-<body>
-  <div class=""card"">
-    <div class=""badge"">🟢 HTTP API Port 5005 Online</div>
-    <h1>🏝️ Dynamic Island Message Bridge</h1>
-    <p>Hệ thống nhận thông báo Facebook &amp; Zalo đang hoạt động chuẩn xác trên Windows! Click nút bên dưới để thử nghiệm hiển thị lên Dynamic Island ngay lập tức.</p>
-    <div class=""btn-group"">
-      <a href=""/api/test/facebook"" class=""btn btn-fb"">📘 Test Thông Báo Facebook</a>
-      <a href=""/api/test/zalo"" class=""btn btn-zalo"">💬 Test Thông Báo Zalo</a>
-    </div>
-    <div class=""status-box"">
-      &bull; Endpoint: http://127.0.0.1:5005/api/message<br/>
-      &bull; PNA (Private Network Access): Enabled<br/>
-      &bull; Trạng thái: Sẵn sàng nhận tin nhắn từ Facebook và Zalo
-    </div>
-  </div>
-</body>
-</html>";
-                    byte[] htmlBytes = Encoding.UTF8.GetBytes(html);
-                    res.ContentType = "text/html; charset=utf-8";
-                    res.StatusCode = 200;
-                    await res.OutputStream.WriteAsync(htmlBytes);
-                    return;
-                }
-                else if (path.EndsWith("/message") || path.EndsWith("/notification"))
-                {
-                    string app = "Facebook";
-                    string sender = "";
-                    string message = "";
-                    string time = "Vừa xong";
-
-                    if (req.HttpMethod == "POST")
-                    {
-                        using var reader = new StreamReader(req.InputStream, req.ContentEncoding);
-                        string body = await reader.ReadToEndAsync();
-                        if (!string.IsNullOrWhiteSpace(body))
-                        {
-                            using var doc = System.Text.Json.JsonDocument.Parse(body);
-                            var root = doc.RootElement;
-                            if (root.TryGetProperty("app", out var appProp)) app = appProp.GetString() ?? "Facebook";
-                            if (root.TryGetProperty("sender", out var sProp)) sender = sProp.GetString() ?? "Người dùng";
-                            if (root.TryGetProperty("message", out var mProp)) message = mProp.GetString() ?? "";
-                            if (root.TryGetProperty("time", out var tProp)) time = tProp.GetString() ?? "Vừa xong";
-                        }
-                    }
-                    else if (req.HttpMethod == "GET")
-                    {
-                        var qs = req.QueryString;
-                        if (!string.IsNullOrEmpty(qs["app"])) app = qs["app"]!;
-                        if (!string.IsNullOrEmpty(qs["sender"])) sender = qs["sender"]!;
-                        if (!string.IsNullOrEmpty(qs["message"])) message = qs["message"]!;
-                        if (!string.IsNullOrEmpty(qs["time"])) time = qs["time"]!;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(sender) || !string.IsNullOrWhiteSpace(message))
-                    {
-                        bool isZalo = app.Contains("zalo", StringComparison.OrdinalIgnoreCase);
-                        sender = string.IsNullOrWhiteSpace(sender) ? (isZalo ? "Zalo" : "Facebook") : sender.Trim();
-                        message = (message ?? "").Trim();
-
-                        var notif = new DynamicNotification
-                        {
-                            Id = DateTime.Now.Ticks,
-                            AppName = isZalo ? "Zalo" : "Facebook",
-                            AppIcon = isZalo ? "💬" : "📘",
-                            AppColor = isZalo ? "#0068FF" : "#1877F2",
-                            Sender = sender,
-                            Message = message,
-                            Time = time,
-                            PrimaryId = isZalo ? "com.vng.zalo" : "facebook"
-                        };
-
-                        await Dispatcher.InvokeAsync(() =>
-                        {
-                            ShowNotification(notif);
-                        });
-                    }
-
-                    // If request came from an Image ping (e.g. new Image().src = ...), return 1x1 GIF
-                    if (req.AcceptTypes != null && req.AcceptTypes.Any(t => t.Contains("image", StringComparison.OrdinalIgnoreCase)))
-                    {
-                        byte[] gif1x1 = new byte[] {
-                            0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00, 0x00,
-                            0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x21, 0xf9, 0x04, 0x01, 0x00, 0x00, 0x00,
-                            0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02,
-                            0x44, 0x01, 0x00, 0x3b
-                        };
-                        res.ContentType = "image/gif";
-                        res.StatusCode = 200;
-                        await res.OutputStream.WriteAsync(gif1x1);
-                    }
-                    else
-                    {
-                        byte[] respBytes = Encoding.UTF8.GetBytes("{\"success\": true, \"received\": true}");
-                        res.ContentType = "application/json";
-                        res.StatusCode = 200;
-                        await res.OutputStream.WriteAsync(respBytes);
-                    }
-                }
-                else if (path.EndsWith("/outbox"))
-                {
-                    string json;
-                    lock (_outboxLock)
-                    {
-                        json = System.Text.Json.JsonSerializer.Serialize(_pendingOutboxMessages);
-                        _pendingOutboxMessages.Clear();
-                    }
-                    byte[] bytes = Encoding.UTF8.GetBytes(json);
-                    res.ContentType = "application/json";
-                    res.StatusCode = 200;
-                    await res.OutputStream.WriteAsync(bytes);
-                }
-                else if (path.EndsWith("/status"))
-                {
-                    string json = $"{{\"status\": \"running\", \"pna\": true, \"count\": {_realNotificationsList.Count}, \"state\": \"{_currentState}\"}}";
-                    byte[] bytes = Encoding.UTF8.GetBytes(json);
-                    res.ContentType = "application/json";
-                    res.StatusCode = 200;
-                    await res.OutputStream.WriteAsync(bytes);
-                }
-                else
-                {
-                    res.StatusCode = 404;
-                }
-            }
-            catch (Exception ex)
-            {
-                res.StatusCode = 500;
-                byte[] errBytes = Encoding.UTF8.GetBytes($"{{\"error\": \"{ex.Message}\"}}");
-                await res.OutputStream.WriteAsync(errBytes);
-            }
-            finally
-            {
-                try { res.Close(); } catch { }
-            }
-        }
-        #endregion
-
-        private void InputReply_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            TxtReplyPlaceholder.Visibility = string.IsNullOrEmpty(InputReply.Text) ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        private void InputReply_KeyDown(object sender, KeyEventArgs e)
+        private void InputTaskTitle_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
-                BtnSendReply_Click(sender, e);
+                BtnAddReminder_Click(sender, e);
             }
         }
 
-        private void BtnSendReply_Click(object sender, RoutedEventArgs e)
+        private void BtnAddReminder_Click(object sender, RoutedEventArgs e)
         {
-            string reply = InputReply.Text.Trim();
-            if (string.IsNullOrWhiteSpace(reply)) return;
-
-            string senderName = _currentNotification?.Sender ?? TxtNotifySender.Text;
-            string appName = _currentNotification?.AppName ?? TxtAppTag.Text;
-
-            // 1. Silent Background Send (Zero browser tab opening or window switching!)
-            bool sentSilently = RealNotificationService.TrySendSilentReply(appName, senderName, reply);
-
-            // 2. Safely copy to clipboard as seamless backup with retry
-            try
+            string title = InputTaskTitle.Text.Trim();
+            if (string.IsNullOrWhiteSpace(title))
             {
-                Clipboard.SetDataObject(reply, true);
-            }
-            catch { }
-
-            // 3. Enqueue to silent background outbox queue
-            lock (_outboxLock)
-            {
-                _pendingOutboxMessages.Add(new OutboxMessage
-                {
-                    Id = DateTime.Now.Ticks,
-                    App = appName,
-                    Recipient = senderName,
-                    Message = reply,
-                    Time = DateTime.Now.ToString("HH:mm:ss")
-                });
+                ShowModernToast("Vui lòng nhập nội dung việc cần làm!", "⚠️", "#F59E0B");
+                InputTaskTitle.Focus();
+                return;
             }
 
-            // 4. Mark current notification as permanently handled and dismissed
-            if (_currentNotification != null)
+            string timeInput = InputTaskTime.Text.Trim();
+            DateTime targetDate = DateTime.Today.AddDays(_selectedDayOffset);
+
+            if (TryParseScheduleDateTime(timeInput, _selectedDayOffset, out DateTime parsedDate))
             {
-                _deletedNotificationIds.Add(_currentNotification.Id);
-                string hash = RealNotificationService.ComputeFingerprint(_currentNotification.AppName, _currentNotification.Sender, _currentNotification.Message);
-                _deletedNotificationHashes.Add(hash);
-                SaveDeletedNotifications();
-                _realNotificationsList.RemoveAll(n => n.Id == _currentNotification.Id);
-                _currentNotification = null;
+                targetDate = parsedDate;
+            }
+            else
+            {
+                // Fallback to current time + 30 mins
+                targetDate = targetDate.Add(DateTime.Now.TimeOfDay).AddMinutes(30);
             }
 
-            // 5. Clear reply input
-            InputReply.Text = "";
+            var item = new ScheduleReminder
+            {
+                Title = title,
+                DueDate = targetDate,
+                Category = Categories[_selectedCategoryIndex],
+                IsCompleted = false,
+                IsNotified = targetDate <= DateTime.Now,
+                IsChecked = false,
+                PriorityOrder = _remindersList.Count > 0 ? _remindersList.Max(r => r.PriorityOrder) + 1 : 0
+            };
 
-            // 6. Modern feedback toast (Zero outgoing message on Core Island!)
-            ShowModernToast($"✓ Đã gửi phản hồi tới {senderName}!", "✓", "#10B981");
+            _remindersList.Add(item);
+            SaveReminders();
 
-            // CRITICAL: NEVER display outgoing messages from user ("Bạn") on the compact island at Core!
-            PillCompactNotification.Visibility = Visibility.Collapsed;
+            InputTaskTitle.Text = "";
+            InputTaskTime.Text = "";
 
-            // 7. Smoothly collapse back to Compact state
-            SwitchState(IslandState.Compact);
+            // Focus on newly added item
+            _currentReminderFilter = ReminderFilter.All;
+            var filtered = GetFilteredReminders();
+            int idx = filtered.FindIndex(r => r.Id == item.Id);
+            if (idx >= 0) _currentReminderIndex = idx;
+
+            UpdateRemindersUI();
+            ShowModernToast($"✓ Đã thêm lịch nhắc lúc {targetDate:HH:mm} ({targetDate:dd/MM})!", "📅", "#10B981");
         }
 
-        private void ChipReply_Click(object sender, RoutedEventArgs e)
+        private bool TryParseScheduleDateTime(string timeText, int dayOffset, out DateTime result)
+        {
+            result = DateTime.Today.AddDays(dayOffset);
+            if (string.IsNullOrWhiteSpace(timeText))
+            {
+                result = result.Add(DateTime.Now.TimeOfDay).AddMinutes(30);
+                return true;
+            }
+
+            timeText = timeText.Trim().Replace("h", ":").Replace(".", ":");
+
+            // 1. Try full DateTime
+            if (DateTime.TryParse(timeText, new CultureInfo("vi-VN"), DateTimeStyles.None, out DateTime fullDt))
+            {
+                result = fullDt;
+                return true;
+            }
+
+            // 2. Try standard TimeSpan
+            if (TimeSpan.TryParse(timeText, out TimeSpan ts))
+            {
+                result = DateTime.Today.AddDays(dayOffset).Add(ts);
+                return true;
+            }
+
+            // 3. Try integer hour (e.g. "16" -> 16:00)
+            if (int.TryParse(timeText, out int hour) && hour >= 0 && hour <= 23)
+            {
+                result = DateTime.Today.AddDays(dayOffset).AddHours(hour);
+                return true;
+            }
+
+            // 4. Try split H:M
+            var parts = timeText.Split(':');
+            if (parts.Length == 2 && int.TryParse(parts[0], out int h) && int.TryParse(parts[1], out int m))
+            {
+                if (h >= 0 && h <= 23 && m >= 0 && m <= 59)
+                {
+                    result = DateTime.Today.AddDays(dayOffset).AddHours(h).AddMinutes(m);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        #region Interactive Calendar Picker
+        private void RenderCalendarDays()
+        {
+            if (UniformGridDays == null) return;
+            UniformGridDays.Children.Clear();
+
+            var viCulture = new CultureInfo("vi-VN");
+            TxtCalMonthYear.Text = $"Tháng {_calendarViewingMonth.Month}, {_calendarViewingMonth.Year}";
+            TxtSelectedDateDisplay.Text = $"📅 {_calendarSelectedDate.ToString("dddd, dd/MM/yyyy", viCulture)}";
+
+            // Vietnamese / ISO calendar: Week starts on Monday (T2)
+            int firstDayOffset = ((int)_calendarViewingMonth.DayOfWeek + 6) % 7;
+            DateTime startDate = _calendarViewingMonth.AddDays(-firstDayOffset);
+
+            for (int i = 0; i < 42; i++)
+            {
+                DateTime cellDate = startDate.AddDays(i);
+                bool isCurrentMonth = cellDate.Month == _calendarViewingMonth.Month;
+                bool isToday = cellDate.Date == DateTime.Today;
+                bool isSelected = cellDate.Date == _calendarSelectedDate.Date;
+                bool hasTasks = _remindersList.Any(r => !r.IsCompleted && r.DueDate.Date == cellDate.Date);
+
+                var btn = new Button
+                {
+                    Margin = new Thickness(1.5),
+                    Height = 22,
+                    Cursor = Cursors.Hand,
+                    BorderThickness = new Thickness(isSelected || isToday ? 1 : 0),
+                    Tag = cellDate
+                };
+
+                var border = new FrameworkElementFactory(typeof(Border));
+                border.SetValue(Border.CornerRadiusProperty, new CornerRadius(5));
+
+                if (isSelected)
+                {
+                    border.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(2, 132, 199)));
+                    border.SetValue(Border.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(56, 189, 248)));
+                }
+                else if (isToday)
+                {
+                    border.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(12, 37, 64)));
+                    border.SetValue(Border.BorderBrushProperty, new SolidColorBrush(Color.FromRgb(56, 189, 248)));
+                }
+                else if (isCurrentMonth)
+                {
+                    border.SetValue(Border.BackgroundProperty, new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)));
+                    border.SetValue(Border.BorderBrushProperty, Brushes.Transparent);
+                }
+                else
+                {
+                    border.SetValue(Border.BackgroundProperty, Brushes.Transparent);
+                    border.SetValue(Border.BorderBrushProperty, Brushes.Transparent);
+                }
+
+                var grid = new FrameworkElementFactory(typeof(Grid));
+                grid.SetValue(Grid.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                grid.SetValue(Grid.VerticalAlignmentProperty, VerticalAlignment.Center);
+
+                var txt = new FrameworkElementFactory(typeof(TextBlock));
+                txt.SetValue(TextBlock.TextProperty, cellDate.Day.ToString());
+                txt.SetValue(TextBlock.FontSizeProperty, 10.0);
+                txt.SetValue(TextBlock.FontWeightProperty, isSelected || isToday ? FontWeights.Bold : FontWeights.Normal);
+                txt.SetValue(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                txt.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+
+                if (isSelected)
+                {
+                    txt.SetValue(TextBlock.ForegroundProperty, Brushes.White);
+                }
+                else if (isToday)
+                {
+                    txt.SetValue(TextBlock.ForegroundProperty, new SolidColorBrush(Color.FromRgb(56, 189, 248)));
+                }
+                else if (isCurrentMonth)
+                {
+                    if (cellDate.DayOfWeek == DayOfWeek.Sunday)
+                        txt.SetValue(TextBlock.ForegroundProperty, new SolidColorBrush(Color.FromRgb(244, 63, 94)));
+                    else if (cellDate.DayOfWeek == DayOfWeek.Saturday)
+                        txt.SetValue(TextBlock.ForegroundProperty, new SolidColorBrush(Color.FromRgb(56, 189, 248)));
+                    else
+                        txt.SetValue(TextBlock.ForegroundProperty, new SolidColorBrush(Color.FromRgb(241, 245, 249)));
+                }
+                else
+                {
+                    txt.SetValue(TextBlock.ForegroundProperty, new SolidColorBrush(Color.FromRgb(71, 85, 105)));
+                }
+
+                grid.AppendChild(txt);
+
+                if (hasTasks)
+                {
+                    var dot = new FrameworkElementFactory(typeof(Border));
+                    dot.SetValue(FrameworkElement.WidthProperty, 3.5);
+                    dot.SetValue(FrameworkElement.HeightProperty, 3.5);
+                    dot.SetValue(Border.CornerRadiusProperty, new CornerRadius(1.75));
+                    dot.SetValue(Border.BackgroundProperty, isSelected ? Brushes.White : new SolidColorBrush(Color.FromRgb(245, 158, 11)));
+                    dot.SetValue(FrameworkElement.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+                    dot.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Bottom);
+                    dot.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 14, 0, 0));
+                    grid.AppendChild(dot);
+                }
+
+                border.AppendChild(grid);
+
+                var template = new ControlTemplate(typeof(Button));
+                template.VisualTree = border;
+                btn.Template = template;
+
+                btn.Click += (s, e) =>
+                {
+                    if (s is Button b && b.Tag is DateTime dt)
+                    {
+                        _calendarSelectedDate = dt;
+                        if (dt.Month != _calendarViewingMonth.Month || dt.Year != _calendarViewingMonth.Year)
+                        {
+                            _calendarViewingMonth = new DateTime(dt.Year, dt.Month, 1);
+                        }
+                        RenderCalendarDays();
+                    }
+                };
+
+                UniformGridDays.Children.Add(btn);
+            }
+        }
+
+        private void BtnToggleCalendar_Click(object sender, RoutedEventArgs e)
+        {
+            if (GridCalendarPicker.Visibility == Visibility.Visible)
+            {
+                GridCalendarPicker.Visibility = Visibility.Collapsed;
+                GridTaskOverview.Visibility = Visibility.Visible;
+                BtnToggleCalendar.Content = "📅 Chọn theo lịch";
+            }
+            else
+            {
+                GridTaskOverview.Visibility = Visibility.Collapsed;
+                GridCalendarPicker.Visibility = Visibility.Visible;
+                BtnToggleCalendar.Content = "📋 Xem danh sách";
+
+                if (!string.IsNullOrWhiteSpace(InputTaskTitle.Text))
+                {
+                    InputCalTitle.Text = InputTaskTitle.Text;
+                    TxtCalTitlePlaceholder.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    TxtCalTitlePlaceholder.Visibility = Visibility.Visible;
+                }
+
+                if (string.IsNullOrWhiteSpace(InputCalTime.Text))
+                {
+                    InputCalTime.Text = DateTime.Now.AddMinutes(30).ToString("HH:mm");
+                }
+
+                _calendarViewingMonth = new DateTime(_calendarSelectedDate.Year, _calendarSelectedDate.Month, 1);
+                RenderCalendarDays();
+                InputCalTitle.Focus();
+            }
+        }
+
+        private void BtnCloseCalendar_Click(object sender, RoutedEventArgs e)
+        {
+            GridCalendarPicker.Visibility = Visibility.Collapsed;
+            GridTaskOverview.Visibility = Visibility.Visible;
+            BtnToggleCalendar.Content = "📅 Chọn theo lịch";
+        }
+
+        private void BtnPrevMonth_Click(object sender, RoutedEventArgs e)
+        {
+            _calendarViewingMonth = _calendarViewingMonth.AddMonths(-1);
+            RenderCalendarDays();
+        }
+
+        private void BtnNextMonth_Click(object sender, RoutedEventArgs e)
+        {
+            _calendarViewingMonth = _calendarViewingMonth.AddMonths(1);
+            RenderCalendarDays();
+        }
+
+        private void BtnTodayCal_Click(object sender, RoutedEventArgs e)
+        {
+            _calendarSelectedDate = DateTime.Today;
+            _calendarViewingMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            RenderCalendarDays();
+        }
+
+        private void ChipCalTime_Click(object sender, RoutedEventArgs e)
         {
             if (sender is Button btn && btn.Content != null)
             {
-                InputReply.Text = btn.Content.ToString();
-                BtnSendReply_Click(sender, e);
+                InputCalTime.Text = btn.Content.ToString() ?? "08:00";
             }
         }
 
-        private void BtnShareFile_Click(object sender, RoutedEventArgs e)
+        private void BtnCalCategory_Click(object sender, RoutedEventArgs e)
         {
-            string fileName = _currentFilePath != null ? Path.GetFileName(_currentFilePath) : "file đính kèm";
-            var shareNotif = new DynamicNotification
-            {
-                Id = DateTime.Now.Ticks,
-                AppName = "Zalo",
-                AppIcon = "💬",
-                AppColor = "#0068FF",
-                Sender = "Chia sẻ tệp tin",
-                Message = $"Đang gửi tệp: {fileName} qua tin nhắn Zalo...",
-                PrimaryId = "com.vng.zalo"
-            };
-            ShowNotification(shareNotif);
-            InputReply.Text = $"Gửi bạn tệp {fileName} nhé!";
-            InputReply.Focus();
+            _calCategoryIndex = (_calCategoryIndex + 1) % Categories.Length;
+            BtnCalCategory.Content = Categories[_calCategoryIndex];
         }
+
+        private void InputCalTitle_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            TxtCalTitlePlaceholder.Visibility = string.IsNullOrEmpty(InputCalTitle.Text) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void InputCalTitle_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                BtnSaveCalendarTask_Click(sender, e);
+            }
+        }
+
+        private void BtnSaveCalendarTask_Click(object sender, RoutedEventArgs e)
+        {
+            string title = InputCalTitle.Text.Trim();
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                ShowModernToast("Vui lòng nhập nội dung công việc!", "⚠️", "#F59E0B");
+                InputCalTitle.Focus();
+                return;
+            }
+
+            string timeInput = InputCalTime.Text.Trim();
+            DateTime targetDueDate = _calendarSelectedDate.Date;
+
+            if (TryParseScheduleDateTime(timeInput, 0, out DateTime parsedTime))
+            {
+                targetDueDate = _calendarSelectedDate.Date.Add(parsedTime.TimeOfDay);
+            }
+            else
+            {
+                targetDueDate = _calendarSelectedDate.Date.Add(DateTime.Now.TimeOfDay).AddMinutes(30);
+            }
+
+            var item = new ScheduleReminder
+            {
+                Title = title,
+                DueDate = targetDueDate,
+                Category = Categories[_calCategoryIndex],
+                IsCompleted = false,
+                IsNotified = targetDueDate <= DateTime.Now,
+                IsChecked = false,
+                PriorityOrder = _remindersList.Count > 0 ? _remindersList.Max(r => r.PriorityOrder) + 1 : 0
+            };
+
+            _remindersList.Add(item);
+            SaveReminders();
+
+            InputCalTitle.Text = "";
+            InputTaskTitle.Text = "";
+
+            // Return to task overview and select newly created reminder
+            GridCalendarPicker.Visibility = Visibility.Collapsed;
+            GridTaskOverview.Visibility = Visibility.Visible;
+            BtnToggleCalendar.Content = "📅 Chọn theo lịch";
+
+            _currentReminderFilter = ReminderFilter.All;
+            var filtered = GetFilteredReminders();
+            int idx = filtered.FindIndex(r => r.Id == item.Id);
+            if (idx >= 0) _currentReminderIndex = idx;
+
+            UpdateRemindersUI();
+            RenderCalendarDays();
+            ShowModernToast($"✓ Đã lưu lịch nhắc: {item.Title} lúc {targetDueDate:HH:mm} ({targetDueDate:dd/MM})!", "📅", "#10B981");
+        }
+        #endregion
         #endregion
 
         #region Auto-Update System

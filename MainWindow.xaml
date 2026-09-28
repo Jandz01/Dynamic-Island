@@ -246,10 +246,10 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Satellite 2: Notification & Messages (Luminous Cyan/Blue) -->
+                <!-- Satellite 2: Calendar & Schedule Reminders (Luminous Cyan/Blue) -->
                 <Border x:Name="OrbNotify" Style="{StaticResource OrbitalPlanetStyle}" 
                         Canvas.Left="314" Canvas.Top="124" Background="#0C2540" BorderBrush="#38BDF8" BorderThickness="1.8"
-                        ToolTip="Thông báo &amp; Tin nhắn (Zalo, Messenger, Telegram)" MouseLeftButtonDown="OrbNotify_Click"
+                        ToolTip="Lịch nhắc nhở &amp; Task công việc" MouseLeftButtonDown="OrbNotify_Click"
                         MouseEnter="Planet_MouseEnter" MouseLeave="Planet_MouseLeave">
                     <Border.RenderTransform>
                         <TransformGroup>
@@ -259,8 +259,8 @@
                     </Border.RenderTransform>
                     <Border.Effect><DropShadowEffect Color="#38BDF8" BlurRadius="20" ShadowDepth="0" Opacity="0.9" RenderingBias="Performance"/></Border.Effect>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="💬" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
-                        <TextBlock x:Name="LblNotify" Text="Tin nhắn" Foreground="#E0F2FE" FontSize="12.5" FontWeight="Bold" 
+                        <TextBlock Text="📅" FontSize="20" Foreground="#FFFFFF" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="LblNotify" Text="Lịch nhắc" Foreground="#E0F2FE" FontSize="12.5" FontWeight="Bold" 
                                    Margin="8,0,8,0" VerticalAlignment="Center" Visibility="Collapsed"/>
                     </StackPanel>
                 </Border>
@@ -433,19 +433,19 @@
                                 <TextBlock Text="::" FontSize="13" Foreground="#94A3B8" FontWeight="Bold" VerticalAlignment="Center"/>
                             </Border>
 
-                            <!-- Live Notification Pill: Appears right on compact bar when messages arrive -->
+                            <!-- Live Schedule Reminder Pill: Appears right on compact bar when reminder is due -->
                             <Border x:Name="PillCompactNotification" Background="#0A1E38" BorderBrush="#0284C7" BorderThickness="1.2" 
                                     CornerRadius="8" Padding="6,1.5" Margin="0,0,4,0" Cursor="Hand" Visibility="Collapsed"
-                                    ToolTip="Nhấp để xem đầy đủ và trả lời tin nhắn"
+                                    ToolTip="Nhấp để xem đầy đủ và kiểm tra lịch nhắc nhở"
                                     PreviewMouseLeftButtonDown="PillCompactNotification_Click">
                                 <Border.Effect>
                                     <DropShadowEffect x:Name="GlowCompactNotif" Color="#38BDF8" BlurRadius="10" ShadowDepth="0" Opacity="0.85"/>
                                 </Border.Effect>
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock x:Name="TxtCompactAppIcon" Text="💬" FontSize="11" Margin="0,0,4,0"/>
-                                    <TextBlock x:Name="TxtCompactSender" Text="Zalo" Foreground="#38BDF8" FontSize="11" FontWeight="Bold" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="TxtCompactAppIcon" Text="📅" FontSize="11" Margin="0,0,4,0"/>
+                                    <TextBlock x:Name="TxtCompactSender" Text="Lịch nhắc" Foreground="#38BDF8" FontSize="11" FontWeight="Bold" Margin="0,0,3,0"/>
                                     <TextBlock Text=":" Foreground="#64748B" FontSize="11" Margin="0,0,3,0"/>
-                                    <TextBlock x:Name="TxtCompactMessage" Text="Nội dung tin nhắn..." Foreground="#F8FAFC" FontSize="11" MaxWidth="140" TextTrimming="CharacterEllipsis"/>
+                                    <TextBlock x:Name="TxtCompactMessage" Text="Nội dung nhắc việc..." Foreground="#F8FAFC" FontSize="11" MaxWidth="140" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                             </Border>
 
@@ -743,22 +743,21 @@
                         </Button>
                     </Grid>
 
-                    <!-- 6. NOTIFICATION TASK (Size: 680x175, Message Popup, Filter Tabs & Quick Reply) -->
+                    <!-- 6. CALENDAR & SCHEDULE REMINDER TASK (Size: 680x225) -->
                     <Grid x:Name="ViewNotification" Visibility="Collapsed" Margin="14,6">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <!-- Header: Left (Sender Info) | Right (Filter Tabs + Delete + Page + Close) -->
-                        <Grid Grid.Row="0" Margin="0,0,0,5">
+                        <!-- Header: Left (Grip, Icon, Title, Counter badge) | Right (Toggle Cal + Close) -->
+                        <Grid Grid.Row="0" Margin="0,0,0,6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
 
-                            <!-- Left: Drag Handle, App Icon & Sender details -->
+                            <!-- Left: Drag Handle, Calendar Icon & Title details -->
                             <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Border Tag="DragGrip" Background="#1E293B" CornerRadius="5" Padding="5,2" Margin="0,0,8,0"
                                         Cursor="SizeAll" ToolTip="Giữ chuột vào đây để kéo di chuyển Dynamic Island (Click đúp để về giữa)"
@@ -770,98 +769,285 @@
                                 </Border>
 
                                 <Border x:Name="BadgeAppIcon" Width="26" Height="26" CornerRadius="13" 
-                                        Background="#0068FF" Margin="0,0,7,0" VerticalAlignment="Center">
+                                        Background="#0284C7" Margin="0,0,7,0" VerticalAlignment="Center">
                                     <Border.Effect>
-                                        <DropShadowEffect x:Name="BadgeAppGlow" Color="#0068FF" BlurRadius="12" ShadowDepth="0" Opacity="0.8"/>
+                                        <DropShadowEffect x:Name="BadgeAppGlow" Color="#38BDF8" BlurRadius="12" ShadowDepth="0" Opacity="0.8"/>
                                     </Border.Effect>
-                                    <TextBlock x:Name="TxtAppIcon" Text="💬" FontSize="13" Foreground="White" 
+                                    <TextBlock x:Name="TxtAppIcon" Text="📅" FontSize="13" Foreground="White" 
                                                HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel VerticalAlignment="Center">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="TxtNotifySender" Text="Chưa có thông báo" Foreground="#F8FAFC" FontSize="13" FontWeight="Bold" MaxWidth="220" TextTrimming="CharacterEllipsis" Margin="0,0,6,0"/>
-                                        <Border x:Name="BorderAppTag" Background="#0C2540" BorderBrush="#0284C7" BorderThickness="0.8" CornerRadius="7" Padding="5,1" VerticalAlignment="Center">
-                                            <TextBlock x:Name="TxtAppTag" Text="Hệ thống" Foreground="#38BDF8" FontSize="9.5" FontWeight="SemiBold"/>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="Lịch nhắc &amp; Task" Foreground="#F8FAFC" FontSize="12.5" FontWeight="Bold" Margin="0,0,6,0"/>
+                                        <Border x:Name="BorderTaskBadge" Background="#0C2540" BorderBrush="#0284C7" BorderThickness="0.8" CornerRadius="7" Padding="6,1" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtTaskBadge" Text="0 chờ" Foreground="#38BDF8" FontSize="9.5" FontWeight="SemiBold"/>
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock x:Name="TxtNotifyTime" Text="Không có thông báo chờ" Foreground="#94A3B8" FontSize="10" Margin="0,1,0,0"/>
+                                    <TextBlock x:Name="TxtCurrentDateSub" Text="Hôm nay" Foreground="#94A3B8" FontSize="10" Margin="0,1,0,0"/>
                                 </StackPanel>
                             </StackPanel>
 
-                            <!-- Right: Filter Chips + Action Buttons (Delete, Nav, Close) -->
+                            <!-- Right: Toggle Calendar Button & Close Button (Spacious and completely separated from 0 chờ) -->
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                <!-- Filter Tabs -->
-                                <Button x:Name="BtnFilterAll" Style="{StaticResource ActionChipStyle}" Content="Tất cả (0)" Padding="6,2" Margin="0,0,3,0" Click="BtnFilterAll_Click"/>
-                                <Button x:Name="BtnFilterZalo" Style="{StaticResource ActionChipStyle}" Content="💬 Zalo (0)" Padding="6,2" Margin="0,0,3,0" Click="BtnFilterZalo_Click"/>
-                                <Button x:Name="BtnFilterFacebook" Style="{StaticResource ActionChipStyle}" Content="📘 Facebook (0)" Padding="6,2" Margin="0,0,6,0" Click="BtnFilterFacebook_Click"/>
+                                <!-- Toggle Calendar Button -->
+                                <Button x:Name="BtnToggleCalendar" Style="{StaticResource ActionChipStyle}" 
+                                        Background="#0C2540" BorderBrush="#38BDF8" Foreground="#E0F2FE"
+                                        Content="📅 Chọn theo lịch" ToolTip="Mở bảng lịch tháng đầy đủ để chọn bất kỳ ngày giờ nào"
+                                        Padding="10,3" Margin="0,0,8,0" Click="BtnToggleCalendar_Click"/>
 
-                                <!-- Delete Button -->
-                                <Button x:Name="BtnDeleteNotification" Style="{StaticResource ActionChipStyle}" Background="#2B1219" BorderBrush="#E11D48" Foreground="#FDA4AF"
-                                        Content="🗑️ Xóa" ToolTip="Xóa vĩnh viễn thông báo này" Margin="0,0,6,0" Padding="6,2" Click="BtnDeleteNotification_Click"/>
-
-                                <!-- Prev / Next Navigation -->
-                                <Button x:Name="BtnPrevNotif" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Trước" Click="BtnPrevNotif_Click">
-                                    <TextBlock Text="◀" FontSize="9"/>
-                                </Button>
-                                <TextBlock x:Name="TxtNotifCounter" Text="0/0" Foreground="#94A3B8" FontSize="10" VerticalAlignment="Center" Margin="3,0"/>
-                                <Button x:Name="BtnNextNotif" Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Tiếp" Margin="0,0,6,0" Click="BtnNextNotif_Click">
-                                    <TextBlock Text="▶" FontSize="9"/>
-                                </Button>
-
-                                <Button Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Đóng" Click="BtnCloseToCompact_Click">
+                                <Button Style="{StaticResource CircleIconBtn}" Width="20" Height="20" ToolTip="Thu gọn về Dynamic Island (Đóng)" Click="BtnCloseToCompact_Click">
                                     <TextBlock Text="✕" FontSize="11"/>
                                 </Button>
                             </StackPanel>
                         </Grid>
 
-                        <!-- Message Content Preview Bubble (or Empty State) -->
-                        <Grid Grid.Row="1" Margin="0,3">
-                            <!-- Bubble with text -->
-                            <Border x:Name="BorderMsgBubble" Background="#0C1527" BorderBrush="#1E293B" BorderThickness="1.2" 
-                                    CornerRadius="10" Padding="14,8" MinHeight="45">
-                                <TextBlock x:Name="TxtNotifyContent" 
-                                           Text="" 
-                                           Foreground="#FFFFFF" FontSize="13" TextWrapping="Wrap" MaxHeight="75" LineHeight="18" TextTrimming="CharacterEllipsis"/>
-                            </Border>
+                        <!-- Row 1: Content Area (Mode 1: Task Overview, OR Mode 2: Interactive Month Calendar) -->
+                        <Grid Grid.Row="1">
+                            <!-- MODE 1: TASK OVERVIEW & QUICK BAR -->
+                            <Grid x:Name="GridTaskOverview" Visibility="Visible">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
 
-                            <!-- Empty State Card -->
-                            <Border x:Name="BorderEmptyState" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" 
-                                    CornerRadius="9" Padding="12,6" Visibility="Collapsed">
-                                <TextBlock Text="🎉 Không có thông báo nào trong mục này (Đã xóa / đã đọc hết)!" 
-                                           Foreground="#64748B" FontSize="11.5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                        </Grid>
+                                <!-- Row 0: Filter Tabs & Priority Drag Hint -->
+                                <Grid Grid.Row="0" Margin="0,0,0,5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
 
-                        <!-- Quick Reply Bar: Suggestions Chips + Input Box + Send Button -->
-                        <Grid x:Name="GridReplyBar" Grid.Row="2" Margin="0,2,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                                    <!-- Filter Tabs -->
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="BtnFilterAll" Style="{StaticResource ActionChipStyle}" Content="Tất cả (0)" Padding="7,2" Margin="0,0,4,0" Click="BtnFilterAll_Click"/>
+                                        <Button x:Name="BtnFilterToday" Style="{StaticResource ActionChipStyle}" Content="Hôm nay (0)" Padding="7,2" Margin="0,0,4,0" Click="BtnFilterToday_Click"/>
+                                        <Button x:Name="BtnFilterUpcoming" Style="{StaticResource ActionChipStyle}" Content="Sắp tới (0)" Padding="7,2" Margin="0,0,4,0" Click="BtnFilterUpcoming_Click"/>
+                                        <Button x:Name="BtnFilterDone" Style="{StaticResource ActionChipStyle}" Content="Đã xong (0)" Padding="7,2" Margin="0,0,4,0" Click="BtnFilterDone_Click"/>
+                                    </StackPanel>
 
-                            <Grid Grid.Column="0" Margin="0,0,8,0">
-                                <Border Background="#0B0F17" BorderBrush="#334155" BorderThickness="1" CornerRadius="14" Padding="12,3">
+                                    <!-- Right: Hint & Task counter -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="↕ Kéo thẻ hoặc bấm ▲/▼ để đổi ưu tiên" Foreground="#64748B" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <Border Background="#1E293B" CornerRadius="6" Padding="6,1" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtReminderCounter" Text="0 task" Foreground="#38BDF8" FontSize="10" FontWeight="SemiBold"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Row 1: Scrollable Task List with Drag & Drop Reordering OR Empty State -->
+                                <Grid Grid.Row="1" Margin="0,0,0,4">
+                                    <!-- Scrollable Task List -->
+                                    <ScrollViewer x:Name="ScrollTaskList" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                                  MaxHeight="125" Focusable="False">
+                                        <StackPanel x:Name="PanelTaskList" Orientation="Vertical"/>
+                                    </ScrollViewer>
+
+                                    <!-- Empty State Card -->
+                                    <Border x:Name="BorderEmptyReminders" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" 
+                                            CornerRadius="10" Padding="14,14" Visibility="Collapsed" VerticalAlignment="Center">
+                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock Text="🎉 Không có lịch nhắc nhở nào trong mục này!" 
+                                                       Foreground="#94A3B8" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="Nhập công việc bên dưới hoặc bấm '📅 Chọn theo lịch' để tạo task mới." 
+                                                       Foreground="#64748B" FontSize="11" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <!-- Row 2: Bottom Quick-Add Bar -->
+                                <Grid Grid.Row="2" Margin="0,2,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Left: Inputs (Title, Day button, Time input, Category button) -->
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
+                                        <!-- Task Title Input -->
+                                        <Border Background="#0B0F17" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="10,3" Width="190" Margin="0,0,5,0">
+                                            <Grid>
+                                                <TextBlock x:Name="TxtTaskTitlePlaceholder" Text="Nhập việc cần làm..." Foreground="#64748B" 
+                                                           FontSize="11" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                                <TextBox x:Name="InputTaskTitle" Background="Transparent" Foreground="#F8FAFC" 
+                                                         CaretBrush="#38BDF8" BorderThickness="0" 
+                                                         FontSize="11.5" VerticalAlignment="Center"
+                                                         PreviewMouseLeftButtonDown="TextBox_PreviewMouseLeftButtonDown"
+                                                         GotFocus="TextBox_GotFocus"
+                                                         TextChanged="InputTaskTitle_TextChanged"
+                                                         KeyDown="InputTaskTitle_KeyDown"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Day Button (click to open calendar or cycle) -->
+                                        <Button x:Name="BtnTaskDay" Style="{StaticResource ActionChipStyle}" Content="📅 Hôm nay" 
+                                                ToolTip="Nhấp để đổi ngày hoặc mở lịch chọn ngày chi tiết" 
+                                                Padding="7,3" Margin="0,0,5,0" Click="BtnTaskDay_Click"/>
+
+                                        <!-- Time Input: HH:mm -->
+                                        <Border Background="#0B0F17" BorderBrush="#334155" BorderThickness="1" CornerRadius="10" Padding="7,3" Width="58" Margin="0,0,5,0">
+                                            <Grid>
+                                                <TextBlock x:Name="TxtTimePlaceholder" Text="16:00" Foreground="#475569" 
+                                                           FontSize="11" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                                <TextBox x:Name="InputTaskTime" Background="Transparent" Foreground="#38BDF8" 
+                                                         CaretBrush="#38BDF8" BorderThickness="0" FontWeight="SemiBold"
+                                                         FontSize="11" VerticalAlignment="Center" MaxLength="5"
+                                                         PreviewMouseLeftButtonDown="TextBox_PreviewMouseLeftButtonDown"
+                                                         GotFocus="TextBox_GotFocus"
+                                                         TextChanged="InputTaskTime_TextChanged"
+                                                         KeyDown="InputTaskTitle_KeyDown"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Category Cycle Button -->
+                                        <Button x:Name="BtnTaskCategory" Style="{StaticResource ActionChipStyle}" Content="💼 Công việc" 
+                                                ToolTip="Nhấp để đổi danh mục" 
+                                                Padding="7,3" Margin="0,0,5,0" Click="BtnTaskCategory_Click"/>
+                                    </StackPanel>
+
+                                    <!-- Right: Quick Presets & Add -->
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button Style="{StaticResource ActionChipStyle}" Content="+15p" Padding="5,2" Margin="0,0,2,0" ToolTip="Hẹn sau 15 phút" Click="QuickTimePreset_Click"/>
+                                        <Button Style="{StaticResource ActionChipStyle}" Content="+30p" Padding="5,2" Margin="0,0,2,0" ToolTip="Hẹn sau 30 phút" Click="QuickTimePreset_Click"/>
+                                        <Button Style="{StaticResource ActionChipStyle}" Content="+1h" Padding="5,2" Margin="0,0,4,0" ToolTip="Hẹn sau 1 tiếng" Click="QuickTimePreset_Click"/>
+                                        <Button x:Name="BtnAddReminder" Style="{StaticResource ActionChipStyle}" 
+                                                Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
+                                                Content="➕ Thêm" Padding="10,3" Click="BtnAddReminder_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Grid>
+
+                            <!-- MODE 2: INTERACTIVE MONTH CALENDAR & TIME PICKER -->
+                            <Grid x:Name="GridCalendarPicker" Visibility="Collapsed" Margin="0,2,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="250"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Column 0: Interactive Month Calendar -->
+                                <Border Grid.Column="0" Background="#0A0E17" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="10" Padding="8,6" Margin="0,0,8,0">
                                     <Grid>
-                                        <TextBlock x:Name="TxtReplyPlaceholder" Text="Nhập nội dung trả lời trực tiếp..." Foreground="#64748B" 
-                                                   FontSize="11" VerticalAlignment="Center" IsHitTestVisible="False"/>
-                                        <TextBox x:Name="InputReply" Background="Transparent" Foreground="#F8FAFC" 
-                                                 CaretBrush="#38BDF8" BorderThickness="0" 
-                                                 FontSize="11.5" VerticalAlignment="Center"
-                                                 PreviewMouseLeftButtonDown="TextBox_PreviewMouseLeftButtonDown"
-                                                 GotFocus="TextBox_GotFocus"
-                                                 TextChanged="InputReply_TextChanged"
-                                                 KeyDown="InputReply_KeyDown"/>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Month Navigation Header -->
+                                        <Grid Grid.Row="0" Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button x:Name="BtnPrevMonth" Style="{StaticResource CircleIconBtn}" Width="22" Height="22" ToolTip="Tháng trước" Click="BtnPrevMonth_Click">
+                                                <TextBlock Text="◀" FontSize="9"/>
+                                            </Button>
+                                            <TextBlock x:Name="TxtCalMonthYear" Grid.Column="1" Text="Tháng 9, 2026" Foreground="#F8FAFC" FontSize="11.5" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            <Button x:Name="BtnNextMonth" Grid.Column="2" Style="{StaticResource CircleIconBtn}" Width="22" Height="22" ToolTip="Tháng sau" Click="BtnNextMonth_Click">
+                                                <TextBlock Text="▶" FontSize="9"/>
+                                            </Button>
+                                        </Grid>
+
+                                        <!-- Weekday Header: T2 T3 T4 T5 T6 T7 CN -->
+                                        <UniformGrid Grid.Row="1" Rows="1" Columns="7" Margin="0,0,0,3">
+                                            <TextBlock Text="T2" Foreground="#64748B" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="T3" Foreground="#64748B" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="T4" Foreground="#64748B" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="T5" Foreground="#64748B" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="T6" Foreground="#64748B" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="T7" Foreground="#38BDF8" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                            <TextBlock Text="CN" Foreground="#F43F5E" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                                        </UniformGrid>
+
+                                        <!-- 6x7 Days Grid (Populated dynamically in C#) -->
+                                        <UniformGrid x:Name="UniformGridDays" Grid.Row="2" Rows="6" Columns="7"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Column 1: Task Details, Time Picker & Save -->
+                                <Border Grid.Column="1" Background="#0C1527" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="10" Padding="12,8">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <!-- Row 0: Selected Date Badge -->
+                                        <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,6">
+                                            <Border Background="#0C2540" BorderBrush="#0284C7" BorderThickness="1" CornerRadius="7" Padding="8,2" Margin="0,0,6,0">
+                                                <TextBlock x:Name="TxtSelectedDateDisplay" Text="📅 Thứ Hai, 28/09/2026" Foreground="#38BDF8" FontSize="11" FontWeight="Bold"/>
+                                            </Border>
+                                            <Button Style="{StaticResource ActionChipStyle}" Content="Hôm nay" Padding="6,2" ToolTip="Chọn ngày hôm nay" Click="BtnTodayCal_Click"/>
+                                        </StackPanel>
+
+                                        <!-- Row 1: Task Title Input -->
+                                        <Border Grid.Row="1" Background="#0B0F17" BorderBrush="#334155" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,6">
+                                            <Grid>
+                                                <TextBlock x:Name="TxtCalTitlePlaceholder" Text="Nhập công việc cần hoàn thành vào ngày này..." Foreground="#64748B" 
+                                                           FontSize="11" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                                                <TextBox x:Name="InputCalTitle" Background="Transparent" Foreground="#F8FAFC" 
+                                                         CaretBrush="#38BDF8" BorderThickness="0" 
+                                                         FontSize="11.5" VerticalAlignment="Center"
+                                                         PreviewMouseLeftButtonDown="TextBox_PreviewMouseLeftButtonDown"
+                                                         GotFocus="TextBox_GotFocus"
+                                                         TextChanged="InputCalTitle_TextChanged"
+                                                         KeyDown="InputCalTitle_KeyDown"/>
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Row 2: Exact Time Selection (HH:mm) + Quick Time Presets -->
+                                        <Grid Grid.Row="2" Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Time Input & Label -->
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                <TextBlock Text="⏰ Giờ hẹn:" Foreground="#94A3B8" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                <Border Background="#0B0F17" BorderBrush="#38BDF8" BorderThickness="1" CornerRadius="8" Padding="8,3" Width="68">
+                                                    <TextBox x:Name="InputCalTime" Text="16:00" Background="Transparent" Foreground="#38BDF8" 
+                                                             CaretBrush="#38BDF8" BorderThickness="0" FontWeight="Bold" HorizontalContentAlignment="Center"
+                                                             FontSize="12" VerticalAlignment="Center" MaxLength="5"
+                                                             PreviewMouseLeftButtonDown="TextBox_PreviewMouseLeftButtonDown"
+                                                             GotFocus="TextBox_GotFocus"
+                                                             KeyDown="InputCalTitle_KeyDown"/>
+                                                </Border>
+                                            </StackPanel>
+
+                                            <!-- Quick Hour Chips -->
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Button Style="{StaticResource ActionChipStyle}" Content="08:00" Padding="5,2" Margin="0,0,2,0" Click="ChipCalTime_Click"/>
+                                                <Button Style="{StaticResource ActionChipStyle}" Content="12:00" Padding="5,2" Margin="0,0,2,0" Click="ChipCalTime_Click"/>
+                                                <Button Style="{StaticResource ActionChipStyle}" Content="15:00" Padding="5,2" Margin="0,0,2,0" Click="ChipCalTime_Click"/>
+                                                <Button Style="{StaticResource ActionChipStyle}" Content="18:00" Padding="5,2" Margin="0,0,2,0" Click="ChipCalTime_Click"/>
+                                                <Button Style="{StaticResource ActionChipStyle}" Content="20:00" Padding="5,2" Margin="0,0,2,0" Click="ChipCalTime_Click"/>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Row 3: Category Selector + Save & Cancel Buttons -->
+                                        <Grid Grid.Row="3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button x:Name="BtnCalCategory" Grid.Column="0" Style="{StaticResource ActionChipStyle}" Content="💼 Công việc" 
+                                                    ToolTip="Nhấp để đổi danh mục" Padding="8,3" Click="BtnCalCategory_Click"/>
+
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                                <Button Style="{StaticResource ActionChipStyle}" Content="✕ Hủy" Padding="10,3" Margin="0,0,5,0" Click="BtnCloseCalendar_Click"/>
+                                                <Button x:Name="BtnSaveCalendarTask" Style="{StaticResource ActionChipStyle}" 
+                                                        Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
+                                                        Content="✓ Lưu lịch nhắc" Padding="12,3" Click="BtnSaveCalendarTask_Click"/>
+                                            </StackPanel>
+                                        </Grid>
                                     </Grid>
                                 </Border>
                             </Grid>
-
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                <Button Style="{StaticResource ActionChipStyle}" Content="👍 Ok" Padding="6,2" Margin="0,0,3,0" Click="ChipReply_Click"/>
-                                <Button Style="{StaticResource ActionChipStyle}" Content="⏳ Đợi 5p" Padding="6,2" Margin="0,0,4,0" Click="ChipReply_Click"/>
-                                <Button x:Name="BtnSendReply" Style="{StaticResource ActionChipStyle}" 
-                                        Background="#0284C7" BorderBrush="#38BDF8" Foreground="#FFFFFF" FontWeight="Bold"
-                                        Content="➤ Gửi" Padding="10,3" Click="BtnSendReply_Click"/>
-                            </StackPanel>
                         </Grid>
                     </Grid>
 

@@ -22,8 +22,8 @@ namespace DynamicIsland
 
     public static class UpdateService
     {
-        public static readonly Version CurrentVersion = new Version(1, 5, 0);
-        public static readonly string CurrentVersionString = "v1.5.0";
+        public static readonly Version CurrentVersion = new Version(1, 6, 0);
+        public static readonly string CurrentVersionString = "v1.6.0";
 
         private const string RepoOwner = "Jandz01";
         private const string RepoName = "Dynamic-Island";

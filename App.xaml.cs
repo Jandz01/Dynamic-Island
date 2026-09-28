@@ -25,6 +25,7 @@ public partial class App : Application
                 File.WriteAllText(logFile, args.Exception.ToString());
             }
             catch { }
+            args.Handled = true;
         };
         base.OnStartup(e);
     }
